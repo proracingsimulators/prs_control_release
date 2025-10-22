@@ -121,23 +121,16 @@ jobs:
         (Get-Content ${{ env.RELEASE_CHANGES }}) -replace "\[\{version\}\]", "[$releaseVersion]" `
                                                  -replace "\{date\}", "$releaseDate" | Set-Content ${{ env.RELEASE_CHANGES }}
 
-    - name: Add prs_service version info to changes.md
+    - name: Add prs_service changes to changes.md
       shell: pwsh
       run: |
-        $releaseDate = Get-Date -Format "dd-MM-yyyy"
-        $releaseApi = "https://api.github.com/repos/proracingsimulators/prs_service/releases"
-        try {
-          $response = Invoke-RestMethod -Uri $releaseApi -Headers @{Authorization = "token ${{ secrets.PAT_TOKEN }}"} -Method Get
-          $latestRelease = $response | Sort-Object -Property created_at -Descending | Select-Object -First 1
-          if ($latestRelease) {
-            $releaseVersion = $latestRelease.tag_name
-            $versionString = $releaseVersion -replace "^v", "" -replace "-(alpha|beta)$", ""
-            $releaseBody = $latestRelease.body -replace "\{version\}", "$versionString" -replace "\{date\}", "$releaseDate"
-            "`n## prs_service Changes (from $releaseVersion)`n" | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
-            $releaseBody | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
-          }
-        } catch {
-          Write-Host "Could not fetch prs_service release info: $_"
+        $serviceChangesPath = "${{ github.workspace }}\prs_service\changes.md"
+        if (Test-Path $serviceChangesPath) {
+          Write-Host "Found prs_service changes.md, appending to release notes..."
+          "`n## prs_service Changes`n" | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+          Get-Content $serviceChangesPath | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+        } else {
+          Write-Host "No changes.md found in prs_service submodule"
         }
 
     - name: Archive build
