@@ -1,0 +1,49 @@
+name: Test Submodules Checkout
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  test-checkout:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          token: ${{ secrets.PAT_TOKEN }}
+      
+      - name: Verify submodules were cloned
+        run: |
+          echo "Checking prs_service submodule..."
+          if [ -d "prs_service" ] && [ "$(ls -A prs_service)" ]; then
+            echo "✅ prs_service cloned successfully"
+            ls -la prs_service | head -10
+          else
+            echo "❌ prs_service is empty or not cloned"
+            exit 1
+          fi
+          
+          echo ""
+          echo "Checking prs_app submodule..."
+          if [ -d "prs_app" ] && [ "$(ls -A prs_app)" ]; then
+            echo "✅ prs_app cloned successfully"
+            ls -la prs_app | head -10
+          else
+            echo "❌ prs_app is empty or not cloned"
+            exit 1
+          fi
+      
+      - name: Show submodule status
+        run: |
+          echo "Git submodule status:"
+          git submodule status
+      
+      - name: Test successful
+        run: |
+          echo "🎉 All submodules cloned successfully with PAT_TOKEN!"

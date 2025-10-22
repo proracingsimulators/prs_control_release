@@ -1,0 +1,6 @@
+[submodule "prs_service"]
+	path = prs_service
+	url = https://github.com/proracingsimulators/prs_service
+[submodule "prs_app"]
+	path = prs_app
+	url = https://github.com/proracingsimulators/prs_app
