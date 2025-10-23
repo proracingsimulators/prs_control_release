@@ -125,3 +125,32 @@ Certifique-se de que está fazendo push em uma das branches configuradas (develo
 ### Versão incorreta no release
 
 A versão é extraída automaticamente do arquivo `ProRacingSoftware.exe`. Verifique se o AssemblyInfo ou .csproj tem a versão correta.
+
+### Fluxo completo
+
+```
+┌─────────────┐
+│   prs_app   │  Push para develop/release/main
+│             │  ──────────────────────────────────┐
+└─────────────┘                                     │
+                                                    ▼
+┌─────────────┐                          ┌──────────────────┐
+│ prs_service │  Push para develop/      │ prs_control_     │
+│             │  release/main            │    release       │
+└─────────────┘  ────────────────────►   │                  │
+                                          │ Atualiza         │
+                                          │ submódulos       │
+                                          │ automaticamente  │
+                                          └──────────────────┘
+                                                    │
+                                                    ▼
+                                          Trigger build_release.yml
+                                          (compila e cria release)
+```
+
+### Vantagens
+
+✅ Submódulos sempre atualizados automaticamente
+✅ Não precisa atualizar manualmente
+✅ Mantém sincronização entre branches (develop → develop, release → release, etc.)
+✅ Histórico limpo de commits automáticos
