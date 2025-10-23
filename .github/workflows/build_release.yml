@@ -12,18 +12,18 @@ jobs:
     runs-on: windows-2022
 
     env:
-      RELEASE_DIRECTORY: prs_app\ProRacingSoftware\bin\Release"
-      RELEASE_CHANGES: changes.md"
-      ZIP_FILENAME: prs_app.zip"
-      SOLUTION_APP: prs_app\ProRacingSoftware.sln"
-      SOLUTION_SERVICE: prs_service\PrsService.sln"
-      PROJECT_SERVICE: prs_service\Prs.App.Service\Prs.App.Service.csproj"
-      PROJECT_SERVICE_OUT: prs_app\ProRacingSoftware\bin\Release\service"
-      INSTALLER_PROJECT: prs_app\Prs.App.Setup\Prs.App.Setup.csproj"
-      INSTALLER_FILENAME: Prs.App.Setup.exe"
-      INSTALLER_PATH: prs_app\Prs.App.Setup\bin\Release\net8.0-windows\win-x64\publish\Prs.App.Setup.exe"
-      APP_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\ProRacingSoftware.exe"
-      SERVER_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\service\Prs.App.Service.exe"
+      RELEASE_DIRECTORY: prs_app\ProRacingSoftware\bin\Release
+      RELEASE_CHANGES: changes.md
+      ZIP_FILENAME: prs_app.zip
+      SOLUTION_APP: prs_app\ProRacingSoftware.sln
+      SOLUTION_SERVICE: prs_service\PrsService.sln
+      PROJECT_SERVICE: prs_service\Prs.App.Service\Prs.App.Service.csproj
+      PROJECT_SERVICE_OUT: prs_app\ProRacingSoftware\bin\Release\service
+      INSTALLER_PROJECT: prs_app\Prs.App.Setup\Prs.App.Setup.csproj
+      INSTALLER_FILENAME: Prs.App.Setup.exe
+      INSTALLER_PATH: prs_app\Prs.App.Setup\bin\Release\net8.0-windows\win-x64\publish\Prs.App.Setup.exe
+      APP_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\ProRacingSoftware.exe
+      SERVER_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\service\Prs.App.Service.exe
       RELEASE_SUFFIX: none
       RELEASE_PRE: none
       RELEASE_KIND: none
