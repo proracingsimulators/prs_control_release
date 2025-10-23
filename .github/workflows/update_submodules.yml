@@ -1,0 +1,47 @@
+name: Update Submodules
+
+on:
+  repository_dispatch:
+    types: [update-prs-app-submodule, update-prs-service-submodule]
+
+jobs:
+  update-submodule:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.PAT_TOKEN }}
+        submodules: true
+        fetch-depth: 0
+
+    - name: Update prs_app submodule
+      if: github.event.action == 'update-prs-app-submodule'
+      run: |
+        cd prs_app
+        git fetch origin
+        git checkout ${{ github.event.client_payload.branch }}
+        git pull origin ${{ github.event.client_payload.branch }}
+        cd ..
+
+    - name: Update prs_service submodule
+      if: github.event.action == 'update-prs-service-submodule'
+      run: |
+        cd prs_service
+        git fetch origin
+        git checkout ${{ github.event.client_payload.branch }}
+        git pull origin ${{ github.event.client_payload.branch }}
+        cd ..
+
+    - name: Commit and push submodule update
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add .
+        if git diff --staged --quiet; then
+          echo "No changes to commit"
+        else
+          git commit -m "chore: atualiza submódulo para commit ${{ github.event.client_payload.sha }}"
+          git push origin ${{ github.event.client_payload.branch }}
+        fi
