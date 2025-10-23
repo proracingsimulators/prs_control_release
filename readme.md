@@ -235,7 +235,7 @@ Quando uma feature requer alterações tanto no `prs_app` quanto no `prs_service
 git checkout develop
 git checkout -b feature/nova-api
 # ... fazer alterações ...
-git commit -m "feat: adiciona nova API"
+git commit -m "feat: adiciona nova API [skip-release]"
 git push origin feature/nova-api
 
 # No prs_app:
@@ -250,9 +250,7 @@ git push origin feature/usa-nova-api
 git checkout develop
 git merge feature/nova-api
 git push origin develop
-# ✅ Submódulo atualiza automaticamente no prs_control_release
-
-# O commit automático virá com [skip-release], então não gera release ainda
+# ✅ Submódulo atualiza automaticamente no prs_control_release mas não gera o release
 
 # 3. Merge do segundo submódulo para develop
 # No prs_app:
@@ -262,14 +260,6 @@ git push origin develop
 # ✅ Submódulo atualiza e AGORA gera release ALPHA completo
 
 # 4. Repetir o processo para release e main
-```
-
-**Nota**: Os workflows de atualização automática de submódulos já incluem `[skip-release]` por padrão. Quando ambos os submódulos estiverem atualizados, você pode fazer um commit vazio para forçar o release:
-
-```bash
-cd prs_control_release
-git commit --allow-empty -m "chore: libera release com ambos submódulos atualizados"
-git push origin develop
 ```
 
 #### Reverter um release
@@ -335,18 +325,90 @@ git push origin develop
 
 ### Tag Especial de Commit
 
-Use esta tag na mensagem de commit para controlar o comportamento do release:
+Use a tag `[skip-release]` na mensagem de commit para controlar o comportamento do release:
 
 - **`[skip-release]`**: Atualiza o código mas NÃO gera release
 - **Sem tag**: Comportamento padrão - **sempre gera release automaticamente**
 
-**Exemplos:**
-```bash
-# Gera release automaticamente
-git commit -m "feat: adiciona nova funcionalidade"
+#### Como usar a tag [skip-release]
 
+**1. Em commits diretos:**
+```bash
 # NÃO gera release
 git commit -m "chore: atualiza submódulos [skip-release]"
+git push origin develop
+
+# Gera release automaticamente
+git commit -m "feat: adiciona nova funcionalidade"
+git push origin develop
+```
+
+**2. Em Pull Requests (IMPORTANTE):**
+
+Quando você faz merge via Pull Request, o GitHub cria um commit de merge. A tag `[skip-release]` pode ser usada de duas formas:
+
+```bash
+# Opção A: Adicionar [skip-release] em QUALQUER commit da PR
+git commit -m "feat: nova funcionalidade [skip-release]"
+git commit -m "fix: corrige bug"
+git push origin feature/minha-feature
+# Quando fizer merge da PR, o release NÃO será criado
+
+# Opção B: Adicionar [skip-release] na mensagem de merge da PR
+# Na interface do GitHub, ao fazer o merge, edite a mensagem para:
+# "Merge pull request #123 from user/feature [skip-release]"
+# O release NÃO será criado
+```
+
+**A verificação funciona assim:**
+- Se o commit de merge contém `[skip-release]` → não cria release
+- Se QUALQUER commit da PR contém `[skip-release]` → não cria release
+- Se nenhum commit tem a tag → cria release normalmente
+
+**3. Em submódulos:**
+
+A tag também é propagada automaticamente dos submódulos:
+
+```bash
+# No prs_app ou prs_service
+git commit -m "wip: trabalho em progresso [skip-release]"
+git push origin develop
+
+# O workflow de atualização automática criará um commit com:
+# "chore: atualiza submódulo para commit abc123 [skip-release]"
+# E o release NÃO será criado no prs_control_release
+```
+
+#### Exemplos práticos:
+
+**Cenário 1: Feature incompleta**
+```bash
+# Você quer commitar mas a feature não está pronta
+git commit -m "wip: implementando nova funcionalidade [skip-release]"
+git push
+# ✅ Código salvo, mas sem release
+```
+
+**Cenário 2: Múltiplos submódulos**
+```bash
+# Primeiro submódulo (com tag)
+cd prs_service
+git commit -m "feat: nova API [skip-release]"
+git push origin develop
+# ✅ Atualiza mas não gera release
+
+# Segundo submódulo (sem tag)
+cd prs_app  
+git commit -m "feat: integra com nova API"
+git push origin develop
+# ✅ Atualiza E gera release com ambas as mudanças
+```
+
+**Cenário 3: Documentação/Refactoring**
+```bash
+git commit -m "docs: atualiza README [skip-release]"
+git push
+# ✅ Documentação atualizada, sem release desnecessário
 ```
 
 ### Vantagens
