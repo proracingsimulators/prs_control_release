@@ -22,7 +22,8 @@ jobs:
       INSTALLER_PROJECT: prs_app\Prs.App.Setup\Prs.App.Setup.csproj"
       INSTALLER_FILENAME: Prs.App.Setup.exe"
       INSTALLER_PATH: prs_app\Prs.App.Setup\bin\Release\net8.0-windows\win-x64\publish\Prs.App.Setup.exe"
-      MAIN_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\ProRacingSoftware.exe"
+      APP_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\ProRacingSoftware.exe"
+      SERVER_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\service\Prs.App.Service.exe"
       RELEASE_SUFFIX: none
       RELEASE_PRE: none
       RELEASE_KIND: none
@@ -35,21 +36,6 @@ jobs:
         submodules: recursive
         token: ${{ secrets.PAT_TOKEN }}
         fetch-depth: 0
-
-    - name: Set common env
-      shell: pwsh
-      run: |
-        echo "RELEASE_DIRECTORY=prs_app\ProRacingSoftware\bin\Release" >> $env:GITHUB_ENV
-        echo "RELEASE_CHANGES=changes.md" >> $env:GITHUB_ENV
-        echo "ZIP_FILENAME=prs_app.zip" >> $env:GITHUB_ENV
-        echo "SOLUTION_APP=prs_app\ProRacingSoftware.sln" >> $env:GITHUB_ENV
-        echo "SOLUTION_SERVICE=prs_service\PrsService.sln" >> $env:GITHUB_ENV
-        echo "PROJECT_SERVICE=prs_service\Prs.App.Service\Prs.App.Service.csproj" >> $env:GITHUB_ENV
-        echo "PROJECT_SERVICE_OUT=prs_app\ProRacingSoftware\bin\Release\service" >> $env:GITHUB_ENV
-        echo "INSTALLER_PROJECT=prs_app\Prs.App.Setup\Prs.App.Setup.csproj" >> $env:GITHUB_ENV
-        echo "INSTALLER_FILENAME=Prs.App.Setup.exe" >> $env:GITHUB_ENV
-        echo "INSTALLER_PATH=prs_app\Prs.App.Setup\bin\Release\net8.0-windows\win-x64\publish\Prs.App.Setup.exe" >> $env:GITHUB_ENV
-        echo "MAIN_EXE_FILE=prs_app\ProRacingSoftware\bin\Release\ProRacingSoftware.exe" >> $env:GITHUB_ENV
 
     - name: Set alpha env (develop branch)
       if: github.ref == 'refs/heads/develop'
@@ -111,7 +97,7 @@ jobs:
     - name: Set Release Version
       shell: pwsh
       run: |
-        $versionString = (Get-Item "${{ env.MAIN_EXE_FILE }}").VersionInfo.FileVersion
+        $versionString = (Get-Item "${{ env.APP_EXE_FILE }}").VersionInfo.FileVersion
         echo "RELEASE_VERSION=$versionString" >> $env:GITHUB_ENV
 
     - name: Create changes.md if not exists
@@ -143,17 +129,27 @@ jobs:
     - name: Add prs_service changes to changes.md
       shell: pwsh
       run: |
-        $releaseVersion = "${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}"
-        $releaseDate = Get-Date -Format "dd-MM-yyyy"
         $serviceChangesPath = "${{ github.workspace }}\prs_service\changes.md"
         
         if (Test-Path $serviceChangesPath) {
           Write-Host "Found prs_service changes.md, processing and appending to release notes..."
           
+          # Obtém a versão do executável do serviço
+          $serverExePath = "${{ github.workspace }}\${{ env.SERVER_EXE_FILE }}"
+          if (Test-Path $serverExePath) {
+            $serviceVersion = (Get-Item $serverExePath).VersionInfo.FileVersion
+            Write-Host "Service version from executable: $serviceVersion"
+          } else {
+            Write-Host "Warning: Service executable not found at $serverExePath, using app version"
+            $serviceVersion = "${{ env.RELEASE_VERSION }}"
+          }
+          
+          $releaseDate = Get-Date -Format "dd-MM-yyyy"
+          
           # Read and process the service changes file
           $serviceContent = Get-Content $serviceChangesPath -Raw
-          $serviceContent = $serviceContent -replace "\[\{version\}\]", "[$releaseVersion]" `
-                                           -replace "\{version\}", "$releaseVersion" `
+          $serviceContent = $serviceContent -replace "\[\{version\}\]", "[$serviceVersion]" `
+                                           -replace "\{version\}", "$serviceVersion" `
                                            -replace "\{date\}", "$releaseDate"
           
           # Remove the main title from service changes to avoid duplication
