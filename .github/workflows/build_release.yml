@@ -126,6 +126,29 @@ jobs:
                                                  -replace "\{version\}", "$releaseVersion" `
                                                  -replace "\{date\}", "$releaseDate" | Set-Content ${{ env.RELEASE_CHANGES }}
 
+    - name: Add prs_app changes to changes.md
+      shell: pwsh
+      run: |
+        $releaseVersion = "${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}"
+        $releaseDate = Get-Date -Format "dd-MM-yyyy"
+        $appChangesPath = "${{ github.workspace }}\prs_app\changes.md"
+        
+        if (Test-Path $appChangesPath) {
+          Write-Host "Found prs_app changes.md, processing and appending to release notes..."
+          
+          # Read and process the app changes file
+          $appContent = Get-Content $appChangesPath -Raw
+          $appContent = $appContent -replace "\[\{version\}\]", "[$releaseVersion]" `
+                                   -replace "\{version\}", "$releaseVersion" `
+                                   -replace "\{date\}", "$releaseDate"
+          
+          # Append to main changes file
+          "`n---`n" | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+          $appContent | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+        } else {
+          Write-Host "No changes.md found in prs_app submodule"
+        }
+
     - name: Add prs_service changes to changes.md
       shell: pwsh
       run: |
@@ -152,40 +175,11 @@ jobs:
                                            -replace "\{version\}", "$serviceVersion" `
                                            -replace "\{date\}", "$releaseDate"
           
-          # Remove the main title from service changes to avoid duplication
-          $serviceContent = $serviceContent -replace "^# Pro Racing Service\s*\n+", ""
-          
           # Append to main changes file
           "`n---`n" | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
           $serviceContent | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
         } else {
           Write-Host "No changes.md found in prs_service submodule"
-        }
-
-    - name: Add prs_app changes to changes.md
-      shell: pwsh
-      run: |
-        $releaseVersion = "${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}"
-        $releaseDate = Get-Date -Format "dd-MM-yyyy"
-        $appChangesPath = "${{ github.workspace }}\prs_app\changes.md"
-        
-        if (Test-Path $appChangesPath) {
-          Write-Host "Found prs_app changes.md, processing and appending to release notes..."
-          
-          # Read and process the app changes file
-          $appContent = Get-Content $appChangesPath -Raw
-          $appContent = $appContent -replace "\[\{version\}\]", "[$releaseVersion]" `
-                                   -replace "\{version\}", "$releaseVersion" `
-                                   -replace "\{date\}", "$releaseDate"
-          
-          # Remove the main title from app changes to avoid duplication
-          $appContent = $appContent -replace "^# Pro Racing Software\s*\n+", ""
-          
-          # Append to main changes file
-          "`n---`n" | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
-          $appContent | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
-        } else {
-          Write-Host "No changes.md found in prs_app submodule"
         }
 
     - name: Archive build
