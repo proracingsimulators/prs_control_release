@@ -34,14 +34,54 @@ jobs:
         git pull origin ${{ github.event.client_payload.branch }}
         cd ..
 
+    - name: Check if submodule commit has skip-release tag
+      id: check_skip
+      run: |
+        COMMIT_SHA="${{ github.event.client_payload.sha }}"
+        
+        # Determina qual submódulo foi atualizado
+        if [ "${{ github.event.action }}" = "update-prs-app-submodule" ]; then
+          SUBMODULE_DIR="prs_app"
+        else
+          SUBMODULE_DIR="prs_service"
+        fi
+        
+        echo "Checking commit $COMMIT_SHA in $SUBMODULE_DIR"
+        
+        # Obtém a mensagem do commit do submódulo
+        cd $SUBMODULE_DIR
+        if COMMIT_MESSAGE=$(git log -1 --pretty=%B $COMMIT_SHA 2>/dev/null); then
+          echo "Submodule commit message: $COMMIT_MESSAGE"
+          
+          # Verifica se contém [skip-release]
+          if echo "$COMMIT_MESSAGE" | grep -q "\[skip-release\]"; then
+            echo "skip_release_tag= [skip-release]" >> $GITHUB_OUTPUT
+            echo "Found [skip-release] tag in submodule commit - will propagate to control release"
+          else
+            echo "skip_release_tag=" >> $GITHUB_OUTPUT
+            echo "No [skip-release] tag found - release will be created normally"
+          fi
+        else
+          echo "Warning: Could not fetch commit message for $COMMIT_SHA"
+          echo "skip_release_tag=" >> $GITHUB_OUTPUT
+        fi
+        cd ..
+
     - name: Commit and push submodule update
       run: |
         git config user.name "github-actions[bot]"
         git config user.email "github-actions[bot]@users.noreply.github.com"
+        
         git add .
         if git diff --staged --quiet; then
           echo "No changes to commit"
         else
-          git commit -m "chore: atualiza submódulo para commit ${{ github.event.client_payload.sha }}"
+          SKIP_TAG="${{ steps.check_skip.outputs.skip_release_tag }}"
+          COMMIT_MSG="chore: atualiza submódulo para commit ${{ github.event.client_payload.sha }}$SKIP_TAG"
+          echo "Creating commit with message: $COMMIT_MSG"
+          git commit -m "$COMMIT_MSG"
+          
+          echo "Pushing to branch ${{ github.event.client_payload.branch }}"
           git push origin ${{ github.event.client_payload.branch }}
+          echo "✅ Submodule updated successfully!"
         fi
