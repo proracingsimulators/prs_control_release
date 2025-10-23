@@ -207,17 +207,38 @@ jobs:
       shell: pwsh
       run: |
         $shouldRelease = $true
+        
+        # Verifica a mensagem do commit principal (head commit ou merge commit)
         $commitMessage = "${{ github.event.head_commit.message }}"
+        Write-Host "Head commit message: $commitMessage"
         
-        Write-Host "Commit message: $commitMessage"
-        
-        # Se contém [skip-release], não cria release
+        # Se contém [skip-release] na mensagem do merge/commit principal, não cria release
         if ($commitMessage -match "\[skip-release\]") {
           $shouldRelease = $false
-          Write-Host "Found [skip-release] tag - skipping release creation"
+          Write-Host "Found [skip-release] tag in head commit - skipping release creation"
         }
         else {
-          Write-Host "No [skip-release] tag found - will create release"
+          # Se for um merge commit, verifica também os commits individuais
+          if ($commitMessage -match "^Merge pull request" -or $commitMessage -match "^Merge branch") {
+            Write-Host "Detected merge commit, checking individual commits in the push..."
+            
+            # Obtém todos os commits deste push
+            $commits = git log --format=%B ${{ github.event.before }}..${{ github.event.after }}
+            Write-Host "Commits in this push:"
+            Write-Host $commits
+            
+            # Se QUALQUER commit tiver [skip-release], não cria release
+            if ($commits -match "\[skip-release\]") {
+              $shouldRelease = $false
+              Write-Host "Found [skip-release] tag in one or more commits - skipping release creation"
+            }
+            else {
+              Write-Host "No [skip-release] tag found in any commit - will create release"
+            }
+          }
+          else {
+            Write-Host "No [skip-release] tag found - will create release"
+          }
         }
         
         echo "should_release=$shouldRelease" >> $env:GITHUB_OUTPUT
