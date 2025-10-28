@@ -12,6 +12,7 @@ jobs:
     - name: Checkout repository
       uses: actions/checkout@v4
       with:
+        ref: ${{ github.event.client_payload.branch }}
         token: ${{ secrets.PAT_TOKEN }}
         submodules: true
         fetch-depth: 0
