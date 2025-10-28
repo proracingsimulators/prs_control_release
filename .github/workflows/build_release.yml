@@ -1,0 +1,277 @@
+name: Build and Release
+on:
+  push:
+    branches:
+      - develop
+      - release
+      - main
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    runs-on: windows-2022
+
+    env:
+      RELEASE_DIRECTORY: prs_app\ProRacingSoftware\bin\Release
+      RELEASE_CHANGES: changes.md
+      ZIP_FILENAME: prs_app.zip
+      SOLUTION_APP: prs_app\ProRacingSoftware.sln
+      SOLUTION_SERVICE: prs_service\PrsService.sln
+      PROJECT_SERVICE: prs_service\Prs.App.Service\Prs.App.Service.csproj
+      PROJECT_SERVICE_OUT: prs_app\ProRacingSoftware\bin\Release\service
+      INSTALLER_PROJECT: prs_app\Prs.App.Setup\Prs.App.Setup.csproj
+      INSTALLER_FILENAME: Prs.App.Setup.exe
+      INSTALLER_PATH: prs_app\Prs.App.Setup\bin\Release\net8.0-windows\win-x64\publish\Prs.App.Setup.exe
+      APP_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\ProRacingSoftware.exe
+      SERVER_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\service\Prs.App.Service.exe
+      RELEASE_SUFFIX: none
+      RELEASE_PRE: none
+      RELEASE_KIND: none
+      RELEASE_VERSION: none
+
+    steps:
+    - name: Checkout with submodules
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+        token: ${{ secrets.PAT_TOKEN }}
+        fetch-depth: 0
+
+    - name: Set alpha env (develop branch)
+      if: github.ref == 'refs/heads/develop'
+      shell: pwsh
+      run: |
+        echo "RELEASE_PRE=true" >> $env:GITHUB_ENV
+        echo "RELEASE_SUFFIX=-alpha" >> $env:GITHUB_ENV
+        echo "RELEASE_KIND=pre-release (alpha)" >> $env:GITHUB_ENV
+
+    - name: Set beta env (release branch)
+      if: github.ref == 'refs/heads/release'
+      shell: pwsh
+      run: |
+        echo "RELEASE_PRE=true" >> $env:GITHUB_ENV
+        echo "RELEASE_SUFFIX=-beta" >> $env:GITHUB_ENV
+        echo "RELEASE_KIND=pre-release (beta)" >> $env:GITHUB_ENV
+
+    - name: Set stable env (main branch)
+      if: github.ref == 'refs/heads/main'
+      shell: pwsh
+      run: |
+        echo "RELEASE_PRE=false" >> $env:GITHUB_ENV
+        echo "RELEASE_SUFFIX=" >> $env:GITHUB_ENV
+        echo "RELEASE_KIND=stable release" >> $env:GITHUB_ENV
+
+    - name: Restore packages
+      shell: pwsh
+      run: |
+        nuget restore "${{ env.SOLUTION_SERVICE }}"
+        nuget restore "${{ env.SOLUTION_APP }}"
+
+    - name: Build prs_service Solution
+      shell: pwsh
+      run: |
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_SERVICE }}" /p:Configuration=Release /p:Platform="Any CPU"
+
+    - name: Build prs_app Solution
+      shell: pwsh
+      run: |
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_APP }}" /p:Configuration=Release /p:Platform="Any CPU"
+
+    - name: Publish Service Project
+      shell: pwsh
+      run: |
+        dotnet publish "${{ env.PROJECT_SERVICE }}" -c Release -r win-x64 --self-contained true -o "${{ env.PROJECT_SERVICE_OUT }}"
+
+    - name: Build Installer
+      shell: pwsh
+      run: |
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.INSTALLER_PROJECT }}" -t:Publish /p:Configuration=Release /p:DeployOnBuild=true /p:PublishSingleFile=true /p:RuntimeIdentifier=win-x64
+
+    - name: Copy installer file to workspace
+      shell: pwsh
+      run: |
+        $sourcePath = "${{ env.INSTALLER_PATH }}"
+        $destinationPath = "${{ github.workspace }}"
+        Copy-Item -Path $sourcePath -Destination $destinationPath
+
+    - name: Set Release Version
+      shell: pwsh
+      run: |
+        $versionString = (Get-Item "${{ env.APP_EXE_FILE }}").VersionInfo.FileVersion
+        echo "RELEASE_VERSION=$versionString" >> $env:GITHUB_ENV
+
+    - name: Create changes.md if not exists
+      shell: pwsh
+      run: |
+        $changesPath = "${{ github.workspace }}\${{ env.RELEASE_CHANGES }}"
+        if (-not (Test-Path $changesPath)) {
+          "# Release Notes" | Out-File -FilePath $changesPath -Encoding utf8
+          "" | Out-File -FilePath $changesPath -Encoding utf8 -Append
+          "## Changes" | Out-File -FilePath $changesPath -Encoding utf8 -Append
+          "" | Out-File -FilePath $changesPath -Encoding utf8 -Append
+          "### prs_app" | Out-File -FilePath $changesPath -Encoding utf8 -Append
+          "- Build from commit: ${{ github.sha }}" | Out-File -FilePath $changesPath -Encoding utf8 -Append
+          "- Branch: ${{ github.ref_name }}" | Out-File -FilePath $changesPath -Encoding utf8 -Append
+          "" | Out-File -FilePath $changesPath -Encoding utf8 -Append
+          "### prs_service" | Out-File -FilePath $changesPath -Encoding utf8 -Append
+          "- Build from submodule" | Out-File -FilePath $changesPath -Encoding utf8 -Append
+        }
+
+    - name: Update changes.md with version and date
+      shell: pwsh
+      run: |
+        $releaseVersion = "${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}"
+        $releaseDate = Get-Date -Format "dd-MM-yyyy"
+        (Get-Content ${{ env.RELEASE_CHANGES }}) -replace "\[\{version\}\]", "[$releaseVersion]" `
+                                                 -replace "\{version\}", "$releaseVersion" `
+                                                 -replace "\{date\}", "$releaseDate" | Set-Content ${{ env.RELEASE_CHANGES }}
+
+    - name: Add prs_app changes to changes.md
+      shell: pwsh
+      run: |
+        $releaseVersion = "${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}"
+        $releaseDate = Get-Date -Format "dd-MM-yyyy"
+        $appChangesPath = "${{ github.workspace }}\prs_app\changes.md"
+        
+        if (Test-Path $appChangesPath) {
+          Write-Host "Found prs_app changes.md, processing and appending to release notes..."
+          
+          # Read and process the app changes file
+          $appContent = Get-Content $appChangesPath -Raw
+          $appContent = $appContent -replace "\[\{version\}\]", "[$releaseVersion]" `
+                                   -replace "\{version\}", "$releaseVersion" `
+                                   -replace "\{date\}", "$releaseDate"
+          
+          # Append to main changes file
+          "`n---`n" | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+          $appContent | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+        } else {
+          Write-Host "No changes.md found in prs_app submodule"
+        }
+
+    - name: Add prs_service changes to changes.md
+      shell: pwsh
+      run: |
+        $serviceChangesPath = "${{ github.workspace }}\prs_service\changes.md"
+        
+        if (Test-Path $serviceChangesPath) {
+          Write-Host "Found prs_service changes.md, processing and appending to release notes..."
+          
+          # Obtém a versão do executável do serviço
+          $serverExePath = "${{ github.workspace }}\${{ env.SERVER_EXE_FILE }}"
+          if (Test-Path $serverExePath) {
+            $serviceVersion = (Get-Item $serverExePath).VersionInfo.FileVersion
+            Write-Host "Service version from executable: $serviceVersion"
+          } else {
+            Write-Host "Warning: Service executable not found at $serverExePath, using app version"
+            $serviceVersion = "${{ env.RELEASE_VERSION }}"
+          }
+          
+          $releaseDate = Get-Date -Format "dd-MM-yyyy"
+          
+          # Read and process the service changes file
+          $serviceContent = Get-Content $serviceChangesPath -Raw
+          $serviceContent = $serviceContent -replace "\[\{version\}\]", "[$serviceVersion]" `
+                                           -replace "\{version\}", "$serviceVersion" `
+                                           -replace "\{date\}", "$releaseDate"
+          
+          # Append to main changes file
+          "`n---`n" | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+          $serviceContent | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+        } else {
+          Write-Host "No changes.md found in prs_service submodule"
+        }
+
+    - name: Archive build
+      shell: pwsh
+      run: |
+        $zipPath = "${{ github.workspace }}\${{ env.ZIP_FILENAME }}"
+        $sourcePath = "${{ github.workspace }}\${{ env.RELEASE_DIRECTORY }}"
+        if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+        }
+        Compress-Archive -Path $sourcePath\* -DestinationPath $zipPath -Force
+
+    - name: Check if should create release
+      id: check_release
+      shell: pwsh
+      run: |
+        $shouldRelease = $true
+        
+        # Verifica a mensagem do commit principal (head commit ou merge commit)
+        $commitMessage = "${{ github.event.head_commit.message }}"
+        Write-Host "Head commit message: $commitMessage"
+        
+        # Se contém [skip-release] na mensagem do merge/commit principal, não cria release
+        if ($commitMessage -match "\[skip-release\]") {
+          $shouldRelease = $false
+          Write-Host "Found [skip-release] tag in head commit - skipping release creation"
+        }
+        else {
+          # Se for um merge commit, verifica também os commits individuais
+          if ($commitMessage -match "^Merge pull request" -or $commitMessage -match "^Merge branch") {
+            Write-Host "Detected merge commit, checking individual commits in the push..."
+            
+            # Obtém todos os commits deste push
+            $commits = git log --format=%B ${{ github.event.before }}..${{ github.event.after }}
+            Write-Host "Commits in this push:"
+            Write-Host $commits
+            
+            # Se QUALQUER commit tiver [skip-release], não cria release
+            if ($commits -match "\[skip-release\]") {
+              $shouldRelease = $false
+              Write-Host "Found [skip-release] tag in one or more commits - skipping release creation"
+            }
+            else {
+              Write-Host "No [skip-release] tag found in any commit - will create release"
+            }
+          }
+          else {
+            Write-Host "No [skip-release] tag found - will create release"
+          }
+        }
+        
+        echo "should_release=$shouldRelease" >> $env:GITHUB_OUTPUT
+        Write-Host "Final decision - Should create release: $shouldRelease"
+
+    - name: Delete existing release if exists
+      if: steps.check_release.outputs.should_release == 'true'
+      shell: pwsh
+      run: |
+        $tagName = "v${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}"
+        $releaseApi = "https://api.github.com/repos/${{ github.repository }}/releases/tags/$tagName"
+        
+        try {
+          $release = Invoke-RestMethod -Uri $releaseApi -Headers @{Authorization = "token ${{ secrets.GITHUB_TOKEN }}"} -Method Get
+          if ($release) {
+            Write-Host "Found existing release with tag $tagName, deleting..."
+            $deleteUri = "https://api.github.com/repos/${{ github.repository }}/releases/$($release.id)"
+            Invoke-RestMethod -Uri $deleteUri -Headers @{Authorization = "token ${{ secrets.GITHUB_TOKEN }}"} -Method Delete
+            Write-Host "Release deleted successfully"
+            
+            # Also delete the tag
+            $tagDeleteUri = "https://api.github.com/repos/${{ github.repository }}/git/refs/tags/$tagName"
+            try {
+              Invoke-RestMethod -Uri $tagDeleteUri -Headers @{Authorization = "token ${{ secrets.GITHUB_TOKEN }}"} -Method Delete
+              Write-Host "Tag deleted successfully"
+            } catch {
+              Write-Host "Tag deletion failed or tag doesn't exist: $_"
+            }
+          }
+        } catch {
+          Write-Host "No existing release found with tag $tagName or error occurred: $_"
+        }
+
+    - name: Create release
+      if: steps.check_release.outputs.should_release == 'true'
+      uses: softprops/action-gh-release@v1
+      with:
+        prerelease: ${{ env.RELEASE_PRE }}
+        body_path: ${{ github.workspace }}\${{ env.RELEASE_CHANGES }}
+        name: ${{ env.RELEASE_KIND }} v${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}
+        tag_name: v${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}
+        files: |
+          ${{ env.ZIP_FILENAME }}
+          ${{ env.INSTALLER_FILENAME }}
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
