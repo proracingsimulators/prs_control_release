@@ -75,7 +75,7 @@ jobs:
     - name: Build prs_app Solution
       shell: pwsh
       run: |
-        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_APP }}" /p:Configuration=Release /p:Platform="Any CPU"
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_APP }}" /p:Configuration=Release /p:Platform="Any CPU" /p:ReleaseChannel="${{ github.ref_name }}"
 
     - name: Publish Service Project
       shell: pwsh
