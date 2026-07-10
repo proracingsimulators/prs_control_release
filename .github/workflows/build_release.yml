@@ -28,6 +28,8 @@ jobs:
       RELEASE_PRE: none
       RELEASE_KIND: none
       RELEASE_VERSION: none
+      FIRMWARE_CHANNEL: latest-stable.json
+      FIRMWARE_BASE_DIR: prs_app\ProRacingSoftware\firmwares
 
     steps:
     - name: Checkout with submodules
@@ -44,6 +46,7 @@ jobs:
         echo "RELEASE_PRE=true" >> $env:GITHUB_ENV
         echo "RELEASE_SUFFIX=-alpha" >> $env:GITHUB_ENV
         echo "RELEASE_KIND=pre-release (alpha)" >> $env:GITHUB_ENV
+        echo "FIRMWARE_CHANNEL=latest-alpha.json" >> $env:GITHUB_ENV
 
     - name: Set beta env (release branch)
       if: github.ref == 'refs/heads/release'
@@ -52,6 +55,7 @@ jobs:
         echo "RELEASE_PRE=true" >> $env:GITHUB_ENV
         echo "RELEASE_SUFFIX=-beta" >> $env:GITHUB_ENV
         echo "RELEASE_KIND=pre-release (beta)" >> $env:GITHUB_ENV
+        echo "FIRMWARE_CHANNEL=latest-beta.json" >> $env:GITHUB_ENV
 
     - name: Set stable env (main branch)
       if: github.ref == 'refs/heads/main'
@@ -60,12 +64,69 @@ jobs:
         echo "RELEASE_PRE=false" >> $env:GITHUB_ENV
         echo "RELEASE_SUFFIX=" >> $env:GITHUB_ENV
         echo "RELEASE_KIND=stable release" >> $env:GITHUB_ENV
+        echo "FIRMWARE_CHANNEL=latest-stable.json" >> $env:GITHUB_ENV
 
     - name: Restore packages
       shell: pwsh
       run: |
         nuget restore "${{ env.SOLUTION_SERVICE }}"
         nuget restore "${{ env.SOLUTION_APP }}"
+
+    - name: Synchronize firmwares
+      shell: pwsh
+      run: |
+        $firmwareBaseDir = "${{ github.workspace }}\${{ env.FIRMWARE_BASE_DIR }}"
+        $releaseFile = "${{ env.FIRMWARE_CHANNEL }}"
+
+        $devices = @(
+          @{ Name = "MotionPRS";   MetadataUrl = "https://raw.githubusercontent.com/proracingsimulators/prs_fw_release/refs/heads/main/v1/prs-motion/metadata.json" },
+          @{ Name = "PedalPRS";    MetadataUrl = "https://raw.githubusercontent.com/proracingsimulators/prs_fw_release/refs/heads/main/v1/prs-pedal/metadata.json" },
+          @{ Name = "SeatBeltPRS"; MetadataUrl = "https://raw.githubusercontent.com/proracingsimulators/prs_fw_release/refs/heads/main/v1/prs-seat-belt/metadata.json" },
+          @{ Name = "SWheelPRS";   MetadataUrl = "https://raw.githubusercontent.com/proracingsimulators/prs_fw_release/refs/heads/main/v1/prs-steering-wheel/metadata.json" }
+        )
+
+        $failedDevices = @()
+
+        foreach ($device in $devices) {
+          $deviceDir = Join-Path $firmwareBaseDir $device.Name
+          Write-Host "Synchronizing firmwares for $($device.Name)..."
+
+          try {
+            if (-not (Test-Path $deviceDir)) {
+              New-Item -ItemType Directory -Path $deviceDir -Force | Out-Null
+            }
+
+            $metadata = Invoke-RestMethod -Uri $device.MetadataUrl -Headers @{ "User-Agent" = "ProRacingSoftware" }
+            $folders = $metadata.folders
+
+            if (-not $folders -or $folders.Count -eq 0) {
+              Write-Host "No firmware folders found for $($device.Name), skipping."
+              continue
+            }
+
+            $baseUrl = $device.MetadataUrl.Substring(0, $device.MetadataUrl.LastIndexOf('/') + 1)
+
+            foreach ($folder in $folders) {
+              $fileUrl = "$baseUrl$folder/$releaseFile"
+              $filePath = Join-Path $deviceDir "$folder.json"
+              Write-Host "  Downloading $fileUrl -> $filePath"
+              Invoke-WebRequest -Uri $fileUrl -Headers @{ "User-Agent" = "ProRacingSoftware" } -OutFile $filePath
+            }
+
+            $metadataPath = Join-Path $deviceDir "metadata.json"
+            $metadata | ConvertTo-Json -Depth 10 | Out-File -FilePath $metadataPath -Encoding utf8
+
+            Write-Host "Firmwares for $($device.Name) synchronized successfully."
+          }
+          catch {
+            Write-Host "::error::Failed to synchronize firmwares for $($device.Name): $_"
+            $failedDevices += $device.Name
+          }
+        }
+
+        if ($failedDevices.Count -gt 0) {
+          throw "Firmware synchronization failed for: $($failedDevices -join ', ')"
+        }
 
     - name: Build prs_service Solution
       shell: pwsh
