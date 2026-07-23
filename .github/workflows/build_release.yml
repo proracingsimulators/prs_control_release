@@ -138,6 +138,32 @@ jobs:
       run: |
         & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_APP }}" /p:Configuration=Release /p:Platform="Any CPU" /p:ReleaseChannel="${{ github.ref_name }}"
 
+    - name: Ensure legacy runtime dependencies
+      shell: pwsh
+      run: |
+        $releaseDir = Join-Path "${{ github.workspace }}" "${{ env.RELEASE_DIRECTORY }}"
+        $valueTupleSource = Join-Path "${{ github.workspace }}" "prs_app\packages\System.ValueTuple.4.6.1\lib\net47\System.ValueTuple.dll"
+        $valueTupleTarget = Join-Path $releaseDir "System.ValueTuple.dll"
+
+        if (-not (Test-Path $releaseDir)) {
+          throw "Release directory not found: $releaseDir"
+        }
+
+        if (-not (Test-Path $valueTupleTarget)) {
+          if (-not (Test-Path $valueTupleSource)) {
+            throw "System.ValueTuple source DLL not found: $valueTupleSource"
+          }
+
+          Write-Host "System.ValueTuple.dll not found in release output, copying from packages..."
+          Copy-Item -Path $valueTupleSource -Destination $valueTupleTarget -Force
+        }
+
+        if (-not (Test-Path $valueTupleTarget)) {
+          throw "System.ValueTuple.dll is still missing from release output after copy attempt."
+        }
+
+        Write-Host "System.ValueTuple.dll ready at: $valueTupleTarget"
+
     - name: Publish Service Project
       shell: pwsh
       run: |
