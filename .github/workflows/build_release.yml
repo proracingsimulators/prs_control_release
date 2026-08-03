@@ -30,6 +30,7 @@ jobs:
       RELEASE_VERSION: none
       FIRMWARE_CHANNEL: latest-stable.json
       FIRMWARE_BASE_DIR: prs_app\ProRacingSoftware\firmwares
+      FIRMWARE_RELEASE_REPO: https://raw.githubusercontent.com/proracingsimulators/prs_fw_release
 
     steps:
     - name: Checkout with submodules
@@ -77,12 +78,13 @@ jobs:
       run: |
         $firmwareBaseDir = "${{ github.workspace }}\${{ env.FIRMWARE_BASE_DIR }}"
         $releaseFile = "${{ env.FIRMWARE_CHANNEL }}"
+        $releaseRepo = "${{ env.FIRMWARE_RELEASE_REPO }}"
 
         $devices = @(
-          @{ Name = "MotionPRS";   MetadataUrl = "https://raw.githubusercontent.com/proracingsimulators/prs_fw_release/refs/heads/main/v1/prs-motion/metadata.json" },
-          @{ Name = "PedalPRS";    MetadataUrl = "https://raw.githubusercontent.com/proracingsimulators/prs_fw_release/refs/heads/main/v1/prs-pedal/metadata.json" },
-          @{ Name = "SeatBeltPRS"; MetadataUrl = "https://raw.githubusercontent.com/proracingsimulators/prs_fw_release/refs/heads/main/v1/prs-seat-belt/metadata.json" },
-          @{ Name = "SWheelPRS";   MetadataUrl = "https://raw.githubusercontent.com/proracingsimulators/prs_fw_release/refs/heads/main/v1/prs-steering-wheel/metadata.json" }
+          @{ Name = "MotionPRS";   MetadataUrl = "$releaseRepo/refs/heads/main/v1/prs-motion/metadata.json" },
+          @{ Name = "PedalPRS";    MetadataUrl = "$releaseRepo/refs/heads/main/v1/prs-pedal/metadata.json" },
+          @{ Name = "SeatBeltPRS"; MetadataUrl = "$releaseRepo/refs/heads/main/v1/prs-seat-belt/metadata.json" },
+          @{ Name = "SWheelPRS";   MetadataUrl = "$releaseRepo/refs/heads/main/v1/prs-steering-wheel/metadata.json" }
         )
 
         $failedDevices = @()
