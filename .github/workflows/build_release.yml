@@ -18,6 +18,7 @@ jobs:
       SOLUTION_APP: prs_app\ProRacingSoftware.sln
       SOLUTION_SERVICE: prs_service\PrsService.sln
       PROJECT_SERVICE: prs_service\Prs.App.Service\Prs.App.Service.csproj
+      PROJECT_PRS_SERVICE: prs_service\Prs.Service\Prs.Service.csproj
       PROJECT_SERVICE_OUT: prs_app\ProRacingSoftware\bin\Release\service
       INSTALLER_PROJECT: prs_app\Prs.App.Setup\Prs.App.Setup.csproj
       INSTALLER_FILENAME: Prs.App.Setup.exe
@@ -139,6 +140,11 @@ jobs:
       shell: pwsh
       run: |
         & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_APP }}" /p:Configuration=Release /p:Platform="Any CPU" /p:ReleaseChannel="${{ github.ref_name }}"
+
+    - name: Publish Prs.Service
+      shell: pwsh
+      run: |
+        dotnet publish "${{ env.PROJECT_PRS_SERVICE }}" -c Release -r win-x64 --self-contained true -o "${{ env.PROJECT_SERVICE_OUT }}"
 
     - name: Publish Service Project
       shell: pwsh
