@@ -127,16 +127,16 @@ jobs:
         if ($failedDevices.Count -gt 0) {
           throw "Firmware synchronization failed for: $($failedDevices -join ', ')"
         }
-
-    - name: Build prs_service Solution
-      shell: pwsh
-      run: |
-        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_SERVICE }}" /p:Configuration=Release /p:Platform="Any CPU"
-
+        
     - name: Build prs_app Solution
       shell: pwsh
       run: |
         & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_APP }}" /p:Configuration=Release /p:Platform="Any CPU" /p:ReleaseChannel="${{ github.ref_name }}"
+  
+    - name: Build prs_service Solution
+      shell: pwsh
+      run: |
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_SERVICE }}" /p:Configuration=Release /p:Platform="Any CPU" /p:OutputPath="${{ env.PROJECT_SERVICE_OUT }}"
 
     - name: Publish Service Project
       shell: pwsh
