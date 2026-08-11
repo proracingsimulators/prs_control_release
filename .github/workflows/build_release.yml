@@ -146,6 +146,11 @@ jobs:
     #   run: |
     #     dotnet publish "${{ env.PROJECT_SERVICE }}" -c Release -r win-x64 --self-contained true -o "${{ env.PROJECT_SERVICE_OUT }}"
 
+    - name: Restore Installer Runtime Packs
+      shell: pwsh
+      run: |
+        dotnet restore "${{ env.INSTALLER_PROJECT }}" -r win-x64
+
     - name: Build Installer
       shell: pwsh
       run: |
