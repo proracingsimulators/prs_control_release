@@ -146,15 +146,10 @@ jobs:
     #   run: |
     #     dotnet publish "${{ env.PROJECT_SERVICE }}" -c Release -r win-x64 --self-contained true -o "${{ env.PROJECT_SERVICE_OUT }}"
 
-    - name: Restore Installer Runtime Packs
-      shell: pwsh
-      run: |
-        dotnet restore "${{ env.INSTALLER_PROJECT }}" -r win-x64
-
     - name: Build Installer
       shell: pwsh
       run: |
-        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.INSTALLER_PROJECT }}" -t:Publish /p:Configuration=Release /p:DeployOnBuild=true /p:PublishSingleFile=true /p:RuntimeIdentifier=win-x64 /p:SelfContained=true
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.INSTALLER_PROJECT }}" -t:Publish /p:Configuration=Release /p:DeployOnBuild=true /p:PublishSingleFile=true /p:RuntimeIdentifier=win-x64
 
     - name: Copy installer file to workspace
       shell: pwsh
