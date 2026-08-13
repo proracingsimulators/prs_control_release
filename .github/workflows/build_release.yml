@@ -138,13 +138,22 @@ jobs:
     - name: Build prs_service Solution
       shell: pwsh
       run: |
-        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_SERVICE }}" /p:Configuration=Release /p:Platform="Any CPU"
-        copy "${{ github.workspace }}\prs_service\Prs.App.Service\bin\Release\net8.0-windows\win-x64\*" "${{ env.PROJECT_SERVICE_OUT }}"
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_SERVICE }}" /p:Configuration=Release /p:Platform="Any CPU" /p:RuntimeIdentifier=win-x64
 
-    # - name: Publish Service Project
-    #   shell: pwsh
-    #   run: |
-    #     dotnet publish "${{ env.PROJECT_SERVICE }}" -c Release -r win-x64 --self-contained true -o "${{ env.PROJECT_SERVICE_OUT }}"
+        $candidateDirs = @(
+          "${{ github.workspace }}\prs_service\Prs.App.Service\bin\Release\net8.0-windows\win-x64",
+          "${{ github.workspace }}\prs_service\Prs.App.Service\bin\Release\net8.0-windows",
+          "${{ github.workspace }}\prs_service\Prs.App.Service\bin\Release"
+        )
+
+        $sourceDir = $candidateDirs | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+        if (-not $sourceDir) {
+          throw "Service build output directory not found. Checked: $($candidateDirs -join '; ')"
+        }
+
+        New-Item -ItemType Directory -Force -Path "${{ env.PROJECT_SERVICE_OUT }}" | Out-Null
+        Copy-Item -Path (Join-Path $sourceDir '*') -Destination "${{ env.PROJECT_SERVICE_OUT }}" -Recurse -Force
 
     - name: Build Installer
       shell: pwsh
