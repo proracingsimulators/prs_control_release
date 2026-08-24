@@ -72,6 +72,7 @@ jobs:
       run: |
         nuget restore "${{ env.SOLUTION_SERVICE }}"
         nuget restore "${{ env.SOLUTION_APP }}"
+        & "C:\Program Files\dotnet\dotnet.exe" restore "${{ env.INSTALLER_PROJECT }}" -r win-x64
 
     - name: Synchronize firmwares
       shell: pwsh
