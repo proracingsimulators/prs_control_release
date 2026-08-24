@@ -158,7 +158,7 @@ jobs:
     - name: Build Installer
       shell: pwsh
       run: |
-        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.INSTALLER_PROJECT }}" -t:Publish /p:Configuration=Release /p:DeployOnBuild=true /p:PublishSingleFile=true /p:RuntimeIdentifier=win-x64
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.INSTALLER_PROJECT }}" -t:Publish /p:Configuration=Release /p:DeployOnBuild=true /p:PublishSingleFile=true /p:RuntimeIdentifier=win-x64 /p:SelfContained=true
 
     - name: Copy installer file to workspace
       shell: pwsh
