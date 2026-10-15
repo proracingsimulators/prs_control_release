@@ -2,7 +2,7 @@ name: Update Submodules
 
 on:
   repository_dispatch:
-    types: [update-prs-app-submodule, update-prs-service-submodule]
+    types: [update-prs-app-submodule, update-prs-service-submodule, update-prs-app-wpf-submodule]
 
 jobs:
   update-submodule:
@@ -35,6 +35,15 @@ jobs:
         git pull origin ${{ github.event.client_payload.branch }}
         cd ..
 
+    - name: Update prs_app_wpf submodule
+      if: github.event.action == 'update-prs-app-wpf-submodule'
+      run: |
+        cd prs_app_wpf
+        git fetch origin
+        git checkout ${{ github.event.client_payload.branch }}
+        git pull origin ${{ github.event.client_payload.branch }}
+        cd ..
+
     - name: Check if submodule commit has skip-release tag
       id: check_skip
       run: |
@@ -43,6 +52,8 @@ jobs:
         # Determina qual submódulo foi atualizado
         if [ "${{ github.event.action }}" = "update-prs-app-submodule" ]; then
           SUBMODULE_DIR="prs_app"
+        elif [ "${{ github.event.action }}" = "update-prs-app-wpf-submodule" ]; then
+          SUBMODULE_DIR="prs_app_wpf"
         else
           SUBMODULE_DIR="prs_service"
         fi
@@ -83,6 +94,19 @@ jobs:
           git commit -m "$COMMIT_MSG"
           
           echo "Pushing to branch ${{ github.event.client_payload.branch }}"
-          git push origin ${{ github.event.client_payload.branch }}
+          # Mais de um repositório pode disparar atualizações ao mesmo tempo para a mesma
+          # branch; se o push for rejeitado, rebaseia sobre o commit concorrente e tenta de novo.
+          for attempt in 1 2 3 4 5; do
+            if git push origin ${{ github.event.client_payload.branch }}; then
+              break
+            fi
+            if [ "$attempt" -eq 5 ]; then
+              echo "Push failed after $attempt attempts"
+              exit 1
+            fi
+            echo "Push rejected (attempt $attempt), rebasing on remote branch..."
+            sleep $((attempt * 3))
+            git pull --rebase origin ${{ github.event.client_payload.branch }}
+          done
           echo "✅ Submodule updated successfully!"
         fi
