@@ -23,7 +23,7 @@ jobs:
       INSTALLER_FILENAME: Prs.App.Setup.exe
       INSTALLER_PATH: prs_app\Prs.App.Setup\bin\Release\net8.0-windows\win-x64\publish\Prs.App.Setup.exe
       APP_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\ProRacingSoftware.exe
-      SERVER_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\service\Prs.App.Service.exe
+      SERVER_EXE_FILE: prs_app_wpf\publish\service\Prs.App.Service.exe
       RELEASE_SUFFIX: none
       RELEASE_PRE: none
       RELEASE_KIND: none
@@ -31,6 +31,16 @@ jobs:
       FIRMWARE_CHANNEL: latest-stable.json
       FIRMWARE_BASE_DIR: prs_app\ProRacingSoftware\firmwares
       FIRMWARE_RELEASE_REPO: https://raw.githubusercontent.com/proracingsimulators/prs_fw_release
+      # Aplicativo WPF (substituto do prs_app): publicado em um ZIP próprio, sem afetar o
+      # prs_app.zip, que continua sendo consumido pelo instalador legado (Prs.App.Setup).
+      WPF_PROJECT: prs_app_wpf\src\Prs.Wpf\Prs.Wpf.csproj
+      WPF_RELEASE_DIRECTORY: prs_app_wpf\publish
+      WPF_ZIP_FILENAME: prs_app_wpf.zip
+      WPF_EXE_FILE: prs_app_wpf\publish\PRS.exe
+      # O prs_app (e o serviço do prs_app.zip) compila contra este commit fixo do prs_service,
+      # anterior à PRS-776, que trocou a API de conexões do Prs.Sdk usada pelo legado.
+      # O prs_app_wpf.zip usa o commit do submódulo prs_service.
+      LEGACY_SERVICE_REF: 5c2fdd43ce38b148f4f01538f00aa9796224c46f
 
     steps:
     - name: Checkout with submodules
@@ -39,6 +49,23 @@ jobs:
         submodules: recursive
         token: ${{ secrets.PAT_TOKEN }}
         fetch-depth: 0
+
+    - name: Checkout legacy prs_service (prs_app)
+      shell: pwsh
+      run: |
+        $serviceRef = git -C prs_service rev-parse HEAD
+        echo "SERVICE_REF=$serviceRef" >> $env:GITHUB_ENV
+        Write-Host "prs_service submodule: $serviceRef / legacy: ${{ env.LEGACY_SERVICE_REF }}"
+
+        git -C prs_service checkout --quiet ${{ env.LEGACY_SERVICE_REF }}
+        if ($LASTEXITCODE -ne 0) {
+          throw "Falha no checkout do prs_service legado (${{ env.LEGACY_SERVICE_REF }})"
+        }
+
+    - name: Setup .NET 9 SDK (prs_app_wpf)
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
 
     - name: Set alpha env (develop branch)
       if: github.ref == 'refs/heads/develop'
@@ -156,6 +183,29 @@ jobs:
         New-Item -ItemType Directory -Force -Path "${{ env.PROJECT_SERVICE_OUT }}" | Out-Null
         Copy-Item -Path (Join-Path $sourceDir '*') -Destination "${{ env.PROJECT_SERVICE_OUT }}" -Recurse -Force
 
+    - name: Build prs_service Solution (prs_app_wpf)
+      shell: pwsh
+      run: |
+        # Volta ao commit do submódulo; limpa a saída do build legado para não reaproveitar obj/bin.
+        git -C prs_service clean -xfdq
+        git -C prs_service checkout --quiet $env:SERVICE_REF
+        if ($LASTEXITCODE -ne 0) {
+          throw "Falha no checkout do prs_service ($env:SERVICE_REF)"
+        }
+
+        nuget restore "${{ env.SOLUTION_SERVICE }}"
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_SERVICE }}" /p:Configuration=Release /p:Platform="Any CPU"
+        if ($LASTEXITCODE -ne 0) {
+          throw "Build do prs_service ($env:SERVICE_REF) falhou com código $LASTEXITCODE"
+        }
+
+        $sourceDir = "${{ github.workspace }}\prs_service\Prs.App.Service\bin\Release\net8.0-windows\win-x64"
+        if (-not (Test-Path $sourceDir)) {
+          throw "Service build output directory not found: $sourceDir"
+        }
+
+        echo "SERVICE_BUILD_DIR=$sourceDir" >> $env:GITHUB_ENV
+
     - name: Build Installer
       shell: pwsh
       run: |
@@ -173,6 +223,30 @@ jobs:
       run: |
         $versionString = (Get-Item "${{ env.APP_EXE_FILE }}").VersionInfo.FileVersion
         echo "RELEASE_VERSION=$versionString" >> $env:GITHUB_ENV
+
+    - name: Publish prs_app_wpf
+      shell: pwsh
+      run: |
+        $publishDir = "${{ github.workspace }}\${{ env.WPF_RELEASE_DIRECTORY }}"
+        if (Test-Path $publishDir) {
+          Remove-Item $publishDir -Recurse -Force
+        }
+
+        # Framework-dependent: exige o .NET 9 Desktop Runtime na máquina de destino.
+        dotnet publish "${{ env.WPF_PROJECT }}" -c Release -r win-x64 --self-contained false -p:Version=${{ env.RELEASE_VERSION }} -o $publishDir
+        if ($LASTEXITCODE -ne 0) {
+          throw "dotnet publish do prs_app_wpf falhou com código $LASTEXITCODE"
+        }
+
+        $serviceOut = Join-Path $publishDir 'service'
+        New-Item -ItemType Directory -Force -Path $serviceOut | Out-Null
+        Copy-Item -Path (Join-Path $env:SERVICE_BUILD_DIR '*') -Destination $serviceOut -Recurse -Force
+
+        foreach ($required in @("${{ env.WPF_EXE_FILE }}", "${{ env.WPF_RELEASE_DIRECTORY }}\service\Prs.App.Service.exe")) {
+          if (-not (Test-Path "${{ github.workspace }}\$required")) {
+            throw "Arquivo esperado no pacote do prs_app_wpf não encontrado: $required"
+          }
+        }
 
     - name: Create changes.md if not exists
       shell: pwsh
@@ -223,6 +297,27 @@ jobs:
           Write-Host "No changes.md found in prs_app submodule"
         }
 
+    - name: Add prs_app_wpf changes to changes.md
+      shell: pwsh
+      run: |
+        $releaseVersion = "${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}"
+        $releaseDate = Get-Date -Format "dd-MM-yyyy"
+        $wpfChangesPath = "${{ github.workspace }}\prs_app_wpf\changes.md"
+
+        if (Test-Path $wpfChangesPath) {
+          Write-Host "Found prs_app_wpf changes.md, processing and appending to release notes..."
+
+          $wpfContent = Get-Content $wpfChangesPath -Raw
+          $wpfContent = $wpfContent -replace "\[\{version\}\]", "[$releaseVersion]" `
+                                   -replace "\{version\}", "$releaseVersion" `
+                                   -replace "\{date\}", "$releaseDate"
+
+          "`n---`n" | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+          $wpfContent | Out-File -FilePath "${{ env.RELEASE_CHANGES }}" -Encoding utf8 -Append
+        } else {
+          Write-Host "No changes.md found in prs_app_wpf submodule"
+        }
+
     - name: Add prs_service changes to changes.md
       shell: pwsh
       run: |
@@ -266,6 +361,16 @@ jobs:
         }
         Compress-Archive -Path $sourcePath\* -DestinationPath $zipPath -Force
 
+    - name: Archive prs_app_wpf build
+      shell: pwsh
+      run: |
+        $zipPath = "${{ github.workspace }}\${{ env.WPF_ZIP_FILENAME }}"
+        $sourcePath = "${{ github.workspace }}\${{ env.WPF_RELEASE_DIRECTORY }}"
+        if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+        }
+        Compress-Archive -Path $sourcePath\* -DestinationPath $zipPath -Force
+
     - name: Check if should create release
       id: check_release
       shell: pwsh
@@ -276,8 +381,14 @@ jobs:
         $commitMessage = "${{ github.event.head_commit.message }}"
         Write-Host "Head commit message: $commitMessage"
         
+        # Releases só são criadas a partir de develop/release/main. Em outras branches
+        # (ex.: workflow_dispatch para validação) os pacotes ficam apenas como artifacts.
+        if ("${{ github.ref }}" -notin @("refs/heads/develop", "refs/heads/release", "refs/heads/main")) {
+          $shouldRelease = $false
+          Write-Host "Branch ${{ github.ref_name }} is not a release branch - skipping release creation"
+        }
         # Se contém [skip-release] na mensagem do merge/commit principal, não cria release
-        if ($commitMessage -match "\[skip-release\]") {
+        elseif ($commitMessage -match "\[skip-release\]") {
           $shouldRelease = $false
           Write-Host "Found [skip-release] tag in head commit - skipping release creation"
         }
@@ -346,6 +457,16 @@ jobs:
         tag_name: v${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}
         files: |
           ${{ env.ZIP_FILENAME }}
+          ${{ env.WPF_ZIP_FILENAME }}
           ${{ env.INSTALLER_FILENAME }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Upload prs_app_wpf package as artifact
+      if: ${{ !contains(fromJSON('["refs/heads/develop", "refs/heads/release", "refs/heads/main"]'), github.ref) }}
+      uses: actions/upload-artifact@v4
+      with:
+        # Sem o nome da branch: upload-artifact rejeita "/" (ex.: feature/PRS-776).
+        name: prs_app_wpf-run${{ github.run_number }}-${{ github.run_attempt }}
+        retention-days: 7
+        path: ${{ env.WPF_ZIP_FILENAME }}
