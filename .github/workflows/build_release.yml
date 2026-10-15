@@ -466,6 +466,7 @@ jobs:
       if: ${{ !contains(fromJSON('["refs/heads/develop", "refs/heads/release", "refs/heads/main"]'), github.ref) }}
       uses: actions/upload-artifact@v4
       with:
-        name: prs_app_wpf-${{ github.ref_name }}-${{ github.run_number }}
+        # Sem o nome da branch: upload-artifact rejeita "/" (ex.: feature/PRS-776).
+        name: prs_app_wpf-run${{ github.run_number }}-${{ github.run_attempt }}
         retention-days: 7
         path: ${{ env.WPF_ZIP_FILENAME }}
