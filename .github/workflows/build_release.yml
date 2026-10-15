@@ -462,14 +462,10 @@ jobs:
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Upload packages as artifact
+    - name: Upload prs_app_wpf package as artifact
       if: ${{ !contains(fromJSON('["refs/heads/develop", "refs/heads/release", "refs/heads/main"]'), github.ref) }}
       uses: actions/upload-artifact@v4
       with:
-        name: packages-${{ github.ref_name }}-${{ github.run_number }}
+        name: prs_app_wpf-${{ github.ref_name }}-${{ github.run_number }}
         retention-days: 7
-        path: |
-          ${{ env.ZIP_FILENAME }}
-          ${{ env.WPF_ZIP_FILENAME }}
-          ${{ env.INSTALLER_FILENAME }}
-          ${{ env.RELEASE_CHANGES }}
+        path: ${{ env.WPF_ZIP_FILENAME }}
