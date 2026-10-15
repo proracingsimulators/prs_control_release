@@ -23,7 +23,7 @@ jobs:
       INSTALLER_FILENAME: Prs.App.Setup.exe
       INSTALLER_PATH: prs_app\Prs.App.Setup\bin\Release\net8.0-windows\win-x64\publish\Prs.App.Setup.exe
       APP_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\ProRacingSoftware.exe
-      SERVER_EXE_FILE: prs_app\ProRacingSoftware\bin\Release\service\Prs.App.Service.exe
+      SERVER_EXE_FILE: prs_app_wpf\publish\service\Prs.App.Service.exe
       RELEASE_SUFFIX: none
       RELEASE_PRE: none
       RELEASE_KIND: none
@@ -37,6 +37,10 @@ jobs:
       WPF_RELEASE_DIRECTORY: prs_app_wpf\publish
       WPF_ZIP_FILENAME: prs_app_wpf.zip
       WPF_EXE_FILE: prs_app_wpf\publish\PRS.exe
+      # O prs_app (e o serviço do prs_app.zip) compila contra este commit fixo do prs_service,
+      # anterior à PRS-776, que trocou a API de conexões do Prs.Sdk usada pelo legado.
+      # O prs_app_wpf.zip usa o commit do submódulo prs_service.
+      LEGACY_SERVICE_REF: 5c2fdd43ce38b148f4f01538f00aa9796224c46f
 
     steps:
     - name: Checkout with submodules
@@ -45,6 +49,18 @@ jobs:
         submodules: recursive
         token: ${{ secrets.PAT_TOKEN }}
         fetch-depth: 0
+
+    - name: Checkout legacy prs_service (prs_app)
+      shell: pwsh
+      run: |
+        $serviceRef = git -C prs_service rev-parse HEAD
+        echo "SERVICE_REF=$serviceRef" >> $env:GITHUB_ENV
+        Write-Host "prs_service submodule: $serviceRef / legacy: ${{ env.LEGACY_SERVICE_REF }}"
+
+        git -C prs_service checkout --quiet ${{ env.LEGACY_SERVICE_REF }}
+        if ($LASTEXITCODE -ne 0) {
+          throw "Falha no checkout do prs_service legado (${{ env.LEGACY_SERVICE_REF }})"
+        }
 
     - name: Setup .NET 9 SDK (prs_app_wpf)
       uses: actions/setup-dotnet@v4
@@ -167,7 +183,27 @@ jobs:
         New-Item -ItemType Directory -Force -Path "${{ env.PROJECT_SERVICE_OUT }}" | Out-Null
         Copy-Item -Path (Join-Path $sourceDir '*') -Destination "${{ env.PROJECT_SERVICE_OUT }}" -Recurse -Force
 
-        # Reaproveitado pelo pacote do prs_app_wpf, sem depender do layout do prs_app.
+    - name: Build prs_service Solution (prs_app_wpf)
+      shell: pwsh
+      run: |
+        # Volta ao commit do submódulo; limpa a saída do build legado para não reaproveitar obj/bin.
+        git -C prs_service clean -xfdq
+        git -C prs_service checkout --quiet $env:SERVICE_REF
+        if ($LASTEXITCODE -ne 0) {
+          throw "Falha no checkout do prs_service ($env:SERVICE_REF)"
+        }
+
+        nuget restore "${{ env.SOLUTION_SERVICE }}"
+        & "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe" "${{ env.SOLUTION_SERVICE }}" /p:Configuration=Release /p:Platform="Any CPU"
+        if ($LASTEXITCODE -ne 0) {
+          throw "Build do prs_service ($env:SERVICE_REF) falhou com código $LASTEXITCODE"
+        }
+
+        $sourceDir = "${{ github.workspace }}\prs_service\Prs.App.Service\bin\Release\net8.0-windows\win-x64"
+        if (-not (Test-Path $sourceDir)) {
+          throw "Service build output directory not found: $sourceDir"
+        }
+
         echo "SERVICE_BUILD_DIR=$sourceDir" >> $env:GITHUB_ENV
 
     - name: Build Installer
