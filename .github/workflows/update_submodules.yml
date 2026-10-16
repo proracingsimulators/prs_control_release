@@ -2,7 +2,7 @@ name: Update Submodules
 
 on:
   repository_dispatch:
-    types: [update-prs-app-submodule, update-prs-service-submodule, update-prs-app-wpf-submodule]
+    types: [update-prs-service-submodule, update-prs-app-wpf-submodule]
 
 jobs:
   update-submodule:
@@ -16,15 +16,6 @@ jobs:
         token: ${{ secrets.PAT_TOKEN }}
         submodules: true
         fetch-depth: 0
-
-    - name: Update prs_app submodule
-      if: github.event.action == 'update-prs-app-submodule'
-      run: |
-        cd prs_app
-        git fetch origin
-        git checkout ${{ github.event.client_payload.branch }}
-        git pull origin ${{ github.event.client_payload.branch }}
-        cd ..
 
     - name: Update prs_service submodule
       if: github.event.action == 'update-prs-service-submodule'
@@ -50,9 +41,7 @@ jobs:
         COMMIT_SHA="${{ github.event.client_payload.sha }}"
         
         # Determina qual submódulo foi atualizado
-        if [ "${{ github.event.action }}" = "update-prs-app-submodule" ]; then
-          SUBMODULE_DIR="prs_app"
-        elif [ "${{ github.event.action }}" = "update-prs-app-wpf-submodule" ]; then
+        if [ "${{ github.event.action }}" = "update-prs-app-wpf-submodule" ]; then
           SUBMODULE_DIR="prs_app_wpf"
         else
           SUBMODULE_DIR="prs_service"
