@@ -25,7 +25,7 @@ O workflow `build_release.yml` compila automaticamente ambos os projetos e cria 
 2. ✅ Compila o prs_service (solução completa)
 3. ✅ Calcula a versão (`PrsVersionPrefix` do prs_app_wpf + data/hora do build)
 4. ✅ Publica o prs_app_wpf e copia o serviço para `service\`
-5. ✅ Sincroniza os firmwares do prs_fw_release para `firmwares\` do pacote
+5. ✅ Sincroniza os firmwares do prs_fw_release para `service\firmwares\<produto>\<target>.json` do pacote
 6. ✅ Gera/atualiza arquivo changes.md com informações da versão
 7. ✅ Cria o `prs_app_wpf.zip` e o instalador com esse pacote embutido (`prs_setup.zip`)
 8. ✅ Deleta release anterior com a mesma tag (para permitir hotfixes)

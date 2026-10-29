@@ -23,7 +23,8 @@ jobs:
       # alpha/beta/stable nas branches de release; "dev" em validações (workflow_dispatch em outras branches).
       RELEASE_CHANNEL: dev
       FIRMWARE_CHANNEL: latest-stable.json
-      FIRMWARE_BASE_DIR: prs_app_wpf\publish\firmwares
+      # Ao lado do Prs.Service, que é quem grava os firmwares (UpdateFirmware sem firmware_path).
+      FIRMWARE_BASE_DIR: prs_app_wpf\publish\service\firmwares
       FIRMWARE_RELEASE_REPO: https://raw.githubusercontent.com/proracingsimulators/prs_fw_release
       # Pacote do app: PRS.exe (WPF, framework-dependent .NET 9) + service\ (prs_service).
       WPF_PROJECT: prs_app_wpf\src\Prs.Wpf\Prs.Wpf.csproj
@@ -143,12 +144,11 @@ jobs:
         $releaseFile = "${{ env.FIRMWARE_CHANNEL }}"
         $releaseRepo = "${{ env.FIRMWARE_RELEASE_REPO }}"
 
-        $devices = @(
-          @{ Name = "MotionPRS";   MetadataUrl = "$releaseRepo/refs/heads/main/v1/prs-motion/metadata.json" },
-          @{ Name = "PedalPRS";    MetadataUrl = "$releaseRepo/refs/heads/main/v1/prs-pedal/metadata.json" },
-          @{ Name = "SeatBeltPRS"; MetadataUrl = "$releaseRepo/refs/heads/main/v1/prs-seat-belt/metadata.json" },
-          @{ Name = "SWheelPRS";   MetadataUrl = "$releaseRepo/refs/heads/main/v1/prs-steering-wheel/metadata.json" }
-        )
+        # Mesmos nomes do prs_fw_release (v1/<produto>/<target>): o FirmwareSource do prs_service
+        # procura service\firmwares\<produto>\<target>.json pelo PID do dispositivo.
+        $devices = @("prs-motion", "prs-pedal", "prs-seat-belt", "prs-steering-wheel") | ForEach-Object {
+          @{ Name = $_; MetadataUrl = "$releaseRepo/refs/heads/main/v1/$_/metadata.json" }
+        }
 
         $failedDevices = @()
 
