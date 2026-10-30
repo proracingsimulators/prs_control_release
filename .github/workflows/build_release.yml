@@ -122,7 +122,7 @@ jobs:
         }
 
         # Framework-dependent: exige o .NET 9 Desktop Runtime na máquina de destino.
-        dotnet publish "${{ env.WPF_PROJECT }}" -c Release -r win-x64 --self-contained false -p:Version=${{ env.RELEASE_VERSION }} -o $publishDir
+        dotnet publish "${{ env.WPF_PROJECT }}" -c Release -r win-x64 --self-contained false -p:Version=${{ env.RELEASE_VERSION }} -p:PrsChannel=${{ env.RELEASE_CHANNEL }} -o $publishDir
         if ($LASTEXITCODE -ne 0) {
           throw "dotnet publish do prs_app_wpf falhou com código $LASTEXITCODE"
         }
