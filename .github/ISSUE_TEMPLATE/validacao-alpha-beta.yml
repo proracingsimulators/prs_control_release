@@ -1,0 +1,133 @@
+name: Validação da alpha para beta
+description: Checklist de validação completa de uma alpha antes do release beta
+title: "Validação da alpha v<versão> para beta"
+type: Task
+projects: ["proracingsimulators/1"]
+body:
+  - type: markdown
+    attributes:
+      value: Verificações a fazer antes de promover uma alpha para beta, quando uma mudança grande pede validação completa. Crie a issue sem marcar nada; os itens são marcados na própria issue durante a validação.
+  - type: input
+    id: alpha
+    attributes:
+      label: Alpha validada
+      placeholder: v0.19.0000.00000-alpha
+    validations:
+      required: true
+  - type: checkboxes
+    id: secao-1
+    attributes:
+      label: "Versões de firmware"
+      options:
+        - label: "Verificar as versões do prs_sdk_fw de cada firmware. Se alguma firmware estiver usando uma versão desatualizada do sdk, uma nova versão de firmware para a versão mais recente do sdk deve ser gerada."
+  - type: checkboxes
+    id: secao-2
+    attributes:
+      label: "MotionPRS (versão sport)"
+      options:
+        - label: "Validar atualização de firmware ao abrir o app com dispositivo na firmware antiga"
+        - label: "Validar conexão do dispositivo na tela de monitoramento"
+        - label: "Remover e recolocar o usb para verificar se a reconexão automática está funcionando"
+        - label: "Acessar tela de calibração e realizar calibração do dispositivo"
+        - label: "Acessar tela de ajustes e realizar alterações sutis de parâmetros para verificar se algum erro ocorre"
+        - label: "Acessar a tela de testes e realizar movimentos manuais no Motion para verificar seu funcionamento"
+        - label: "Acessar a tela de monitoramento para verificar se o monitoramento do dispositivo está correto durante o jogo"
+        - label: "Validar funcionamento do Motion no Iracing"
+        - label: "Validar funcionamento do Motion no Assetto Corsa"
+        - label: "Validar funcionamento do Motion no Assetto Corsa Competizione"
+        - label: "Validar funcionamento do Motion no Automobilista 2"
+  - type: checkboxes
+    id: secao-3
+    attributes:
+      label: "PedalPRS (versão Sport)"
+      options:
+        - label: "Atualizar firmware do pedal caso uma nova firmware esteja disponível"
+        - label: "Validar conexão do dispositivo na tela de monitoramento"
+        - label: "Remover e recolocar o usb para verificar se a reconexão automática está funcionando"
+        - label: "Acessar tela de calibração e realizar calibração do dispositivo"
+        - label: "Acessar tela de ajustes e realizar alterações sutis de parâmetros para verificar se algum erro ocorre"
+        - label: "Acessar a tela de shaker e realizar alterações sutis de parâmetros para verificar se algum erro ocorre"
+        - label: "Acessar a aba de Teste e testar os shakers do pedal"
+        - label: "Acessar a aba Monitor para verificar se o monitoramento dos pedais estão funcionando durante os jogos"
+        - label: "Validar funcionamento do shaker dos pedais no Iracing"
+        - label: "Validar funcionamento do shaker dos pedais no Assetto Corsa"
+        - label: "Validar funcionamento do shaker dos pedais no Assetto Corsa Competizione"
+        - label: "Validar funcionamento do shaker dos pedais no Automobilista 2"
+  - type: checkboxes
+    id: secao-4
+    attributes:
+      label: "Leds e LCD (versão hub gt)"
+      options:
+        - label: "Validar conexão do dispositivo na tela de monitoramento"
+        - label: "Remover e recolocar o usb para verificar se a reconexão automática está funcionando"
+        - label: "Acionar botões, encoders e borboletas do volante na tela de monitoramento para verificar o funcionamento"
+        - label: "Na tela de leds realizar ajustes para verificar se as cores dos leds estão alterando corretamente"
+        - label: "Na tela de ajustes testar a função “Embreagens Interligadas”"
+        - label: "Com a função “Embreagens Interligadas” ativa ajustar o centro para verificar se há alterações na leitura das embreagens"
+        - label: "Desativar a função “Embreagens Interligadas” e verificar se a leitura individual das embreagens ocorre corretamente"
+        - label: "Acionar a função “Calibrar”. Realizar o procedimento de calibração do dispositivo."
+        - label: "Na tela de monitoramento validar novamente o acionamento dos botões, encoders e borboletas para garantir que o funcionamento está correto após a calibração"
+        - label: "Validar funcionamento dos leds de rpm no Iracing"
+        - label: "Validar funcionamento dos leds de rpm no Assetto Corsa"
+        - label: "Validar funcionamento dos leds de rpm no Assetto Corsa Competizione"
+        - label: "Validar funcionamento dos leds de rpm no Automobilista 2"
+  - type: checkboxes
+    id: secao-5
+    attributes:
+      label: "Base e Direção (versão hub gt)"
+      options:
+        - label: "Validar conexão do dispositivo na tela de monitoramento"
+        - label: "Remover e recolocar o usb para verificar se a reconexão automática está funcionando"
+        - label: "Na tela de ajustes realizar modificações sutis nos parâmetros para verificar se algum erro ocorre"
+        - label: "Ajustar ângulo do volante para 270 graus e testar volante até os batentes"
+        - label: "Ajustar ângulo do volante para 540 graus e testar volante até os batentes"
+        - label: "Ajustar ângulo do volante para 900 graus e testar volante até os batentes"
+  - type: checkboxes
+    id: secao-6
+    attributes:
+      label: "Sistema de vibração (novo app do shaker)"
+      options:
+        - label: "Validar conexão do dispositivo na tela de monitoramento"
+        - label: "Remover e recolocar o usb para verificar se a reconexão automática está funcionando"
+        - label: "Acessar tela de calibração e realizar calibração do dispositivo"
+        - label: "Acessar tela de dispositivos e testar o acionamento de cada dispositivo"
+        - label: "Acessar tela de ajustes, selecionar jogo Assetto Corsa e verificar se os parâmetros são carregados corretamente"
+        - label: "Acessar a tela de monitoramento para verificar se o monitoramento do dispositivo está correto durante o jogo"
+        - label: "Validar funcionamento do shaker no Iracing"
+        - label: "Validar funcionamento do shaker no Assetto Corsa"
+        - label: "Validar funcionamento do shaker no Assetto Corsa Competizione"
+        - label: "Validar funcionamento do shaker no Automobilista 2"
+  - type: checkboxes
+    id: secao-7
+    attributes:
+      label: "Freio de mão (pedal sport)"
+      options:
+        - label: "Validar conexão do dispositivo na tela de monitoramento"
+        - label: "Remover e recolocar o usb para verificar se a reconexão automática está funcionando"
+        - label: "Acessar tela de calibração e realizar calibração do dispositivo"
+        - label: "Acessar tela de ajustes e realizar alterações sutis de parâmetros para verificar se algum erro ocorre"
+        - label: "Acessar a aba monitor e verificar se o monitoramento do dispositivo está funcionando corretamente durante os jogos"
+  - type: checkboxes
+    id: secao-8
+    attributes:
+      label: "Cambio de Marcha"
+      options:
+        - label: "Validar conexão do dispositivo na tela de monitoramento"
+        - label: "Remover e recolocar o usb para verificar se a reconexão automática está funcionando"
+        - label: "Posicionar a alavanca nas posições 1, 2, 3, 4, 5, 6, 7 e R e verificar se a tela de monitoramento registra todas as posições"
+  - type: checkboxes
+    id: secao-9
+    attributes:
+      label: "Cinto"
+      options:
+        - label: "Atualizar firmware do cinto caso uma nova versão esteja disponível"
+        - label: "Validar conexão do dispositivo na tela de monitoramento"
+        - label: "Remover e recolocar o usb para verificar se a reconexão automática está funcionando"
+        - label: "Acessar tela de ajustes e realizar alterações sutis de parâmetros para verificar se algum erro ocorre"
+        - label: "Acessar a tela de testes e realizar movimentos manuais nos motores para verificar seu funcionamento"
+        - label: "Na tela de testes ligar e desligar os leds para verificar seu funcionamento"
+        - label: "Acessar a aba monitor e verificar se o monitoramento do dispositivo está funcionando corretamente durante os jogos"
+        - label: "Validar funcionamento do cinto e leds no Iracing"
+        - label: "Validar funcionamento do cinto e leds no Assetto Corsa"
+        - label: "Validar funcionamento do cinto e leds no Assetto Corsa Competizione"
+        - label: "Validar funcionamento do cinto e leds no Automobilista 2"
