@@ -10,6 +10,9 @@ on:
 jobs:
   build-and-release:
     runs-on: windows-2022
+    # contents: write para criar o release e gravar o branch metadata com o GITHUB_TOKEN.
+    permissions:
+      contents: write
 
     env:
       RELEASE_CHANGES: changes.md
@@ -37,6 +40,8 @@ jobs:
       SETUP_RELEASE_DIRECTORY: setup_publish
       SETUP_EXE_FILENAME: PRS.Setup.exe
       SETUP_ZIP_FILENAME: prs_setup.zip
+      # Checkout do branch órfão "metadata" (metadata.json de atualização do app).
+      METADATA_DIRECTORY: metadata_branch
 
     steps:
     - name: Checkout with submodules
@@ -401,6 +406,62 @@ jobs:
           ${{ env.SETUP_ZIP_FILENAME }}
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    # Metadata de atualização do app (lido pelo PRS Control e pelo PRS.Setup via raw.githubusercontent):
+    # branch órfão "metadata", arquivo v1/prs-control/metadata.json. O branch fica fora dos gatilhos
+    # deste workflow e o push é feito com o GITHUB_TOKEN, então não dispara outro build.
+    - name: Checkout metadata branch workspace
+      if: steps.check_release.outputs.should_release == 'true'
+      uses: actions/checkout@v4
+      with:
+        path: ${{ env.METADATA_DIRECTORY }}
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 1
+
+    - name: Publish app update metadata
+      if: steps.check_release.outputs.should_release == 'true'
+      shell: bash
+      run: |
+        TAG="v${RELEASE_VERSION}${RELEASE_SUFFIX}"
+        cd "$METADATA_DIRECTORY"
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
+        # Outro build (develop/release/main) pode gravar o metadata ao mesmo tempo. Se o push for
+        # rejeitado, parte de novo da ponta remota do branch e regenera o arquivo (um rebase
+        # textual do JSON sempre conflitaria no updatedAt).
+        for attempt in 1 2 3 4 5; do
+          git checkout -q -f --detach
+          git branch -q -D metadata 2>/dev/null || true
+          if git ls-remote --exit-code --heads origin metadata > /dev/null; then
+            git fetch -q --no-tags --depth=1 origin metadata
+            git checkout -q -f -b metadata FETCH_HEAD
+          else
+            echo "Branch metadata não existe, criando branch órfão"
+            git switch -q --orphan metadata
+          fi
+          git clean -q -ffdx
+
+          python ../scripts/generate_app_metadata.py . "$RELEASE_CHANNEL" "$RELEASE_VERSION" "$TAG" "../$SETUP_ZIP_FILENAME" "../$RELEASE_CHANGES"
+
+          git add v1
+          if git diff --staged --quiet; then
+            echo "Nenhuma alteração no metadata"
+            exit 0
+          fi
+          git commit -q -m "chore(metadata): v${RELEASE_VERSION}-${RELEASE_CHANNEL}"
+
+          if git push origin HEAD:refs/heads/metadata; then
+            echo "Metadata publicado: channels.${RELEASE_CHANNEL} -> $TAG"
+            exit 0
+          fi
+          if [ "$attempt" -eq 5 ]; then
+            echo "Push do metadata falhou após $attempt tentativas"
+            exit 1
+          fi
+          echo "Push rejeitado (tentativa $attempt), refazendo sobre o branch remoto..."
+          sleep $((attempt * 3))
+        done
 
     - name: Upload packages as artifact
       if: ${{ !contains(fromJSON('["refs/heads/develop", "refs/heads/release", "refs/heads/main"]'), github.ref) }}
