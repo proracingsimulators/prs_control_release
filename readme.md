@@ -83,6 +83,8 @@ Formato (schema 1, contrato com o prs_app_wpf; não mude sem subir o `schema`):
 
 - `channels.<canal>` (`alpha`, `beta` ou `stable`) aponta para o último release de cada canal. Um canal
   só aparece depois do primeiro release dele.
+  O ponteiro só avança quando a versão nova é maior ou igual à atual (comparada como números), para que
+  dois builds simultâneos do mesmo canal não o façam voltar para a versão menor.
 - `versions` é o histórico em ordem cronológica (o mais recente por último), limitado às últimas 100
   entradas. Um re-release com a mesma tag substitui a entrada antiga, sem duplicar.
 - O arquivo é gerado por `scripts/generate_app_metadata.py` (testes em `scripts/test_generate_app_metadata.py`,

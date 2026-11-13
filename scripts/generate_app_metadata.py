@@ -23,7 +23,8 @@ Formato (schema 1, contrato com o prs_app_wpf):
   "versions": [ { ...mesma entrada..., "channel": "<canal>" } ]
 }
 
-Cada execução grava channels.<canal>, faz upsert por tag em versions (mantendo
+Cada execução grava channels.<canal> (só se a versão for maior ou igual à que
+já está lá, para builds simultâneos não voltarem o ponteiro), faz upsert por tag em versions (mantendo
 só as últimas MAX_VERSIONS entradas) e atualiza updatedAt.
 """
 
@@ -34,7 +35,7 @@ import hashlib
 import json
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Tuple
 
 SCHEMA_VERSION = 1
 PRODUCT = "prs-control"
@@ -100,6 +101,33 @@ def load_notes(changes_path: Path) -> str:
 	# utf-8-sig: o changes.md é gerado pelo PowerShell e pode vir com BOM.
 	# read_text normaliza CRLF para LF.
 	return changes_path.read_text(encoding="utf-8-sig")
+
+
+def version_key(version: Any) -> Optional[Tuple[int, ...]]:
+	"""Converte "0.19.9811.27063" em (0, 19, 9811, 27063); None se não for numérica."""
+	try:
+		return tuple(int(part) for part in str(version).strip().split("."))
+	except ValueError:
+		return None
+
+
+def should_advance_channel(current: Any, entry: Dict[str, Any]) -> bool:
+	"""Diz se channels.<canal> deve passar a apontar para a entrada nova.
+
+	Dois builds do mesmo canal podem publicar fora de ordem (o de versão menor
+	por último, ou o retry refazendo sobre a ponta remota). O ponteiro só
+	avança quando a versão nova é maior ou igual à atual (igual = re-release).
+	Se alguma versão não for numérica, a entrada nova vence, como antes.
+	"""
+	if not isinstance(current, dict):
+		return True
+
+	current_key = version_key(current.get("version"))
+	new_key = version_key(entry.get("version"))
+	if current_key is None or new_key is None:
+		return True
+
+	return new_key >= current_key
 
 
 def require_text(value: str, name: str) -> str:
@@ -180,7 +208,8 @@ def update_metadata(
 	if not isinstance(versions, list):
 		raise ValueError("'versions' precisa ser uma lista no metadata")
 
-	channels[channel] = dict(entry)
+	if should_advance_channel(channels.get(channel), entry):
+		channels[channel] = dict(entry)
 
 	# Upsert por tag: um re-release com a mesma tag substitui a entrada antiga e
 	# vai para o fim da lista (ordem cronológica, a mais recente por último).
@@ -250,7 +279,15 @@ def main() -> None:
 		args.changes,
 		repository=args.repository,
 	)
-	print(f"metadata.json atualizado: {path} ({args.channel} -> {args.tag})")
+	with path.open("r", encoding="utf-8") as fp:
+		current_tag = json.load(fp)["channels"][args.channel]["tag"]
+	if current_tag == args.tag.strip():
+		print(f"metadata.json atualizado: {path} ({args.channel} -> {current_tag})")
+	else:
+		print(
+			f"metadata.json atualizado: {path} ({args.tag} entrou no histórico; "
+			f"{args.channel} continua em {current_tag}, que é mais nova)"
+		)
 
 
 if __name__ == "__main__":

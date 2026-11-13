@@ -66,7 +66,17 @@ def test_same_tag_is_upserted_not_duplicated(tmp_path, release_files):
 	assert tags == ["v0.19.1.2-alpha", "v0.19.1.1-alpha"]
 	assert data["versions"][-1]["setup"]["size"] == len(b"instalador refeito")
 	assert data["versions"][-1]["releasedAt"] == "2026-11-13T12:00:00+00:00"
-	assert data["channels"]["alpha"]["tag"] == "v0.19.1.1-alpha"
+	# Re-release de uma versão mais antiga não volta o ponteiro do canal.
+	assert data["channels"]["alpha"]["tag"] == "v0.19.1.2-alpha"
+
+	# Re-release da versão atual do canal atualiza o ponteiro (versão igual).
+	setup_zip.write_bytes(b"instalador 0.19.1.2 refeito")
+	data = run(metadata_dir, "alpha", "0.19.1.2", "v0.19.1.2-alpha", setup_zip, changes, now="2026-11-13T13:00:00+00:00")
+
+	assert [item["tag"] for item in data["versions"]] == ["v0.19.1.1-alpha", "v0.19.1.2-alpha"]
+	assert data["channels"]["alpha"]["tag"] == "v0.19.1.2-alpha"
+	assert data["channels"]["alpha"]["setup"]["size"] == len(b"instalador 0.19.1.2 refeito")
+	assert data["channels"]["alpha"]["releasedAt"] == "2026-11-13T13:00:00+00:00"
 
 
 def test_channels_are_independent(tmp_path, release_files):
@@ -86,6 +96,41 @@ def test_channels_are_independent(tmp_path, release_files):
 		("v0.19.1.1-beta", "beta"),
 		("v0.19.1.2-alpha", "alpha"),
 	]
+
+
+def test_older_version_does_not_move_channel_back(tmp_path, release_files):
+	# Dois builds alpha simultâneos: o de versão menor publica por último.
+	setup_zip, changes = release_files
+	metadata_dir = tmp_path / "metadata"
+
+	run(metadata_dir, "alpha", "0.19.9811.27063", "v0.19.9811.27063-alpha", setup_zip, changes)
+	data = run(metadata_dir, "alpha", "0.19.9811.27062", "v0.19.9811.27062-alpha", setup_zip, changes, now="2026-11-13T10:00:04+00:00")
+
+	assert data["channels"]["alpha"]["tag"] == "v0.19.9811.27063-alpha"
+	# O histórico continua registrando os dois releases.
+	assert [v["tag"] for v in data["versions"]] == ["v0.19.9811.27063-alpha", "v0.19.9811.27062-alpha"]
+
+
+def test_version_comparison_is_numeric(tmp_path, release_files):
+	# 0.19.10000.1 > 0.19.9999.1 como inteiros (como texto seria menor).
+	setup_zip, changes = release_files
+	metadata_dir = tmp_path / "metadata"
+
+	run(metadata_dir, "beta", "0.19.9999.1", "v0.19.9999.1-beta", setup_zip, changes)
+	data = run(metadata_dir, "beta", "0.19.10000.1", "v0.19.10000.1-beta", setup_zip, changes)
+
+	assert data["channels"]["beta"]["tag"] == "v0.19.10000.1-beta"
+
+
+def test_older_version_in_other_channel_is_independent(tmp_path, release_files):
+	setup_zip, changes = release_files
+	metadata_dir = tmp_path / "metadata"
+
+	run(metadata_dir, "alpha", "0.19.2.0", "v0.19.2.0-alpha", setup_zip, changes)
+	data = run(metadata_dir, "stable", "0.19.1.0", "v0.19.1.0", setup_zip, changes)
+
+	assert data["channels"]["alpha"]["tag"] == "v0.19.2.0-alpha"
+	assert data["channels"]["stable"]["tag"] == "v0.19.1.0"
 
 
 def test_versions_history_is_limited(tmp_path, release_files):
