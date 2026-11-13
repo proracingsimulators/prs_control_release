@@ -30,6 +30,7 @@ O workflow `build_release.yml` compila automaticamente ambos os projetos e cria 
 7. ✅ Cria o `prs_app_wpf.zip` e o instalador com esse pacote embutido (`prs_setup.zip`)
 8. ✅ Deleta release anterior com a mesma tag (para permitir hotfixes)
 9. ✅ Cria novo release com os dois ZIPs
+10. ✅ Grava o `metadata.json` de atualização do app no branch `metadata` (ver [Metadata de atualização do app](#metadata-de-atualização-do-app))
 
 Em outras branches (ex.: `workflow_dispatch` para validação) o release não é criado: os dois ZIPs ficam
 disponíveis como artifact do run por 7 dias.
@@ -41,6 +42,60 @@ Cada release contém:
 - **prs_setup.zip** - Instalador `PRS.Setup.exe` com o pacote acima embutido. Instala as dependências
   (VC++ x86/x64, ASP.NET Core 8, .NET 8 Desktop e .NET 9 Desktop), cria os atalhos e registra o
   desinstalador em "Apps instalados" do Windows
+
+### Metadata de atualização do app
+
+Depois de criar o release, o workflow grava o `metadata.json` que o PRS Control e o PRS.Setup leem para
+saber se há versão nova. O arquivo fica no branch órfão `metadata` deste repositório (criado pelo próprio
+workflow no primeiro release) e é lido sem API do GitHub, pela URL raw:
+
+```
+https://raw.githubusercontent.com/proracingsimulators/prs_control_release/refs/heads/metadata/v1/prs-control/metadata.json
+```
+
+Formato (schema 1, contrato com o prs_app_wpf; não mude sem subir o `schema`):
+
+```json
+{
+  "schema": 1,
+  "product": "prs-control",
+  "updatedAt": "2026-11-13T10:00:00+00:00",
+  "channels": {
+    "alpha": {
+      "version": "0.19.9817.30000",
+      "tag": "v0.19.9817.30000-alpha",
+      "releasedAt": "2026-11-13T10:00:00+00:00",
+      "setup": {
+        "url": "https://github.com/proracingsimulators/prs_control_release/releases/download/v0.19.9817.30000-alpha/prs_setup.zip",
+        "sha256": "<sha256 do prs_setup.zip em hexadecimal>",
+        "size": 123456789
+      },
+      "notes": "<changes.md gerado, igual ao corpo do release>"
+    },
+    "beta": { "...": "mesma estrutura" },
+    "stable": { "...": "mesma estrutura" }
+  },
+  "versions": [
+    { "...": "mesma entrada de channels.<canal>", "channel": "alpha" }
+  ]
+}
+```
+
+- `channels.<canal>` (`alpha`, `beta` ou `stable`) aponta para o último release de cada canal. Um canal
+  só aparece depois do primeiro release dele.
+- `versions` é o histórico em ordem cronológica (o mais recente por último), limitado às últimas 100
+  entradas. Um re-release com a mesma tag substitui a entrada antiga, sem duplicar.
+- O arquivo é gerado por `scripts/generate_app_metadata.py` (testes em `scripts/test_generate_app_metadata.py`,
+  rode com `python -m pytest scripts`). Cada build faz um commit `chore(metadata): v<versão>-<canal>`.
+- O branch `metadata` fica fora dos gatilhos do `build_release.yml` e o push usa o `GITHUB_TOKEN`, então não
+  dispara outro build. Builds simultâneos (ex.: develop e release) refazem o arquivo sobre a ponta remota
+  do branch e tentam o push de novo.
+
+Para gerar localmente:
+
+```bash
+python scripts/generate_app_metadata.py <checkout-do-branch-metadata> alpha 0.19.9817.30000 v0.19.9817.30000-alpha prs_setup.zip changes.md
+```
 
 ### Versão
 
