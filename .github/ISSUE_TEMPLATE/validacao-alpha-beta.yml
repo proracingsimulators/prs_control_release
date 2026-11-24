@@ -131,3 +131,10 @@ body:
         - label: "Validar funcionamento do cinto e leds no Assetto Corsa"
         - label: "Validar funcionamento do cinto e leds no Assetto Corsa Competizione"
         - label: "Validar funcionamento do cinto e leds no Automobilista 2"
+  - type: checkboxes
+    id: secao-10
+    attributes:
+      label: "Desempenho"
+      description: "Benchmark com o prs-bench (prs_service/Prs.Tools.Benchmark, skill benchmark do prs-core): prs-bench ab --baseline stable --candidate alpha --issue proracingsimulators/prs_control_release#<esta issue>"
+      options:
+        - label: "Benchmark stable × alpha sem ❌ (link do comentário)"
