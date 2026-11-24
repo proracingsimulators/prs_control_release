@@ -367,6 +367,32 @@ jobs:
         echo "should_release=$shouldRelease" >> $env:GITHUB_OUTPUT
         Write-Host "Final decision - Should create release: $shouldRelease"
 
+    # Benchmark stable × alpha (prs-bench do prs_service, prs_service#498): roda nos devkits, fora do
+    # CI, e o prs-bench publish grava o resultado no branch metadata (benchmarks/<alpha>/verdict.json).
+    # A BETA só sai se houver um benchmark com as mesmas árvores do prs_service e do prs_app_wpf (o
+    # merge develop -> release muda o commit, não o conteúdo), sem ❌ ou com ❌ aprovado pelo time
+    # (prs-bench approve). O link vai para as notas do release.
+    - name: Checkout benchmarks (metadata branch)
+      if: steps.check_release.outputs.should_release == 'true' && env.RELEASE_CHANNEL == 'beta'
+      uses: actions/checkout@v4
+      with:
+        ref: metadata
+        path: benchmark_metadata
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 1
+
+    - name: Check beta benchmark
+      if: steps.check_release.outputs.should_release == 'true' && env.RELEASE_CHANNEL == 'beta'
+      shell: pwsh
+      run: |
+        $serviceTree = git -C prs_service rev-parse 'HEAD^{tree}'
+        $appTree = git -C prs_app_wpf rev-parse 'HEAD^{tree}'
+        Write-Host "prs_service tree: $serviceTree; prs_app_wpf tree: $appTree"
+        python scripts/check_beta_benchmark.py benchmark_metadata/benchmarks `
+          --prs-service-tree $serviceTree --prs-app-wpf-tree $appTree `
+          --notes "${{ github.workspace }}\${{ env.RELEASE_CHANGES }}"
+        if ($LASTEXITCODE -ne 0) { exit 1 }
+
     - name: Delete existing release if exists
       if: steps.check_release.outputs.should_release == 'true'
       shell: pwsh

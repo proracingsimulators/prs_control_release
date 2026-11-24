@@ -99,6 +99,19 @@ Para gerar localmente:
 python scripts/generate_app_metadata.py <checkout-do-branch-metadata> alpha 0.19.9817.30000 v0.19.9817.30000-alpha prs_setup.zip changes.md
 ```
 
+### Benchmark da BETA
+
+O benchmark stable × alpha (`prs-bench` do `prs_service`, issue prs_service#498) roda nos devkits, fora
+do CI, e é pré-requisito da BETA. O `prs-bench publish` (ou `ab --publish`) grava o resultado no branch
+`metadata`, em `benchmarks/<tag-da-alpha>/`: os dois `*.bench.json`, o `report.md` e o `verdict.json`
+(veredito, aprovação e o commit e a árvore do `prs_service` e do `prs_app_wpf` medidos).
+
+No build da BETA, antes de criar o release, `scripts/check_beta_benchmark.py` (testes em
+`scripts/test_check_beta_benchmark.py`) procura um benchmark com as mesmas árvores dos submódulos. A
+comparação é pela árvore porque o merge `develop` → `release` cria outro commit com o mesmo conteúdo. O
+build **falha** sem benchmark do mesmo código, ou com ❌ sem `approved` (`prs-bench approve --tag <alpha>`
+depois de o time avaliar). A firmware fica fora da checagem. O link do benchmark vai para as notas do release.
+
 ### Versão
 
 A versão é `PrsVersionPrefix.<dias desde 2000-01-01>.<segundos desde 0h UTC / 2>` — o mesmo esquema do

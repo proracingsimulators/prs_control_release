@@ -135,6 +135,6 @@ body:
     id: secao-10
     attributes:
       label: "Desempenho"
-      description: "Benchmark com o prs-bench (prs_service/Prs.Tools.Benchmark, skill benchmark do prs-core): prs-bench ab --baseline stable --candidate alpha --issue proracingsimulators/prs_control_release#<esta issue>"
+      description: "Benchmark com o prs-bench (prs_service/Prs.Tools.Benchmark, skill benchmark do prs-core): prs-bench ab --baseline stable --candidate alpha --publish --issue proracingsimulators/prs_control_release#<esta issue>. O build da BETA falha sem o benchmark publicado do mesmo código, ou com ❌ não aprovado (prs-bench approve)."
       options:
-        - label: "Benchmark stable × alpha sem ❌ (link do comentário)"
+        - label: "Benchmark stable × alpha publicado, sem ❌ ou aprovado pelo time (link do comentário)"
