@@ -135,6 +135,6 @@ body:
     id: secao-10
     attributes:
       label: "Desempenho"
-      description: "Benchmark com o prs-bench (prs_service/Prs.Tools.Benchmark, skill benchmark do prs-core): prs-bench ab --baseline stable --candidate alpha --publish --issue proracingsimulators/prs_control_release#<esta issue>. O build da BETA falha sem o benchmark publicado do mesmo código, ou com ❌ não aprovado (prs-bench approve)."
+      description: "Medição da alpha com o prs-bench (prs_service/Prs.Tools.Benchmark, skill benchmark do prs-core): prs-bench run --tag <alpha> --publish --issue proracingsimulators/prs_control_release#<esta issue>. O build da BETA falha sem a medição publicada do mesmo código ou com um limite do limits.json estourado; um reprovado só libera alterando o limite (PR) e medindo a alpha nova."
       options:
-        - label: "Benchmark stable × alpha publicado, sem ❌ ou aprovado pelo time (link do comentário)"
+        - label: "Medição da alpha publicada e dentro dos limites (link do comentário)"
