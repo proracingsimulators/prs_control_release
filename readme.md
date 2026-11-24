@@ -110,7 +110,9 @@ No build da BETA, antes de criar o release, `scripts/check_beta_benchmark.py` (t
 `scripts/test_check_beta_benchmark.py`) procura um benchmark com as mesmas árvores dos submódulos. A
 comparação é pela árvore porque o merge `develop` → `release` cria outro commit com o mesmo conteúdo. O
 build **falha** sem benchmark do mesmo código, ou com ❌ sem `approved` (`prs-bench approve --tag <alpha>`
-depois de o time avaliar). A firmware fica fora da checagem. O link do benchmark vai para as notas do release.
+depois de o time avaliar). A firmware fica fora da checagem. O link do benchmark vai só para o corpo do
+GitHub Release (`release_body.md`, cópia do `changes.md`); o `changes.md`, que também vira as notas de
+atualização do app, continua só com o changelog.
 
 ### Versão
 

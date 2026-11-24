@@ -24,15 +24,19 @@ a mesma: o merge develop -> release cria outro commit com o mesmo conteúdo, ent
 serve. Passa com "pass"/"warn", ou "fail" com "approved": true. A firmware fica de fora (o
 benchmark roda com as firmwares da beta nos devkits).
 
-Sai com código 1 e uma mensagem ::error:: se nenhum benchmark servir. Com --notes, acrescenta ao
-changes.md do release uma seção com o link do benchmark.
+Sai com código 1 e uma mensagem ::error:: se nenhum benchmark servir. Com --release-body,
+acrescenta uma seção com o link do benchmark ao arquivo do corpo do GitHub Release. Esse arquivo é
+uma cópia do changes.md: o changes.md é o changelog e também vira as notas de atualização do app
+(metadata.json), onde o benchmark não entra.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -72,19 +76,34 @@ def is_released(verdict: Dict[str, Any]) -> bool:
 	return verdict.get("verdict") in ("pass", "warn") or (verdict.get("verdict") == "fail" and verdict.get("approved") is True)
 
 
+def published_at(verdict: Dict[str, Any]) -> datetime:
+	"""publishedAt em UTC (cada máquina grava o próprio offset); sem data ou ilegível fica por último."""
+	text = verdict.get("publishedAt") or ""
+	# O DateTimeOffset do .NET grava 7 dígitos de fração; o fromisoformat do Python < 3.11 aceita até 6.
+	text = re.sub(r"(\.\d{6})\d+", r"\1", text)
+	try:
+		value = datetime.fromisoformat(text)
+	except ValueError:
+		return datetime.min.replace(tzinfo=timezone.utc)
+	if value.tzinfo is None:
+		value = value.replace(tzinfo=timezone.utc)
+	return value.astimezone(timezone.utc)
+
+
 def find_benchmark(verdicts: List[Dict[str, Any]], trees: Dict[str, str]) -> Dict[str, Any]:
 	"""O benchmark liberado das mesmas árvores (o mais recente); senão, BenchmarkCheckError."""
 	matching = [v for v in verdicts if all(tree_of(v, s) == trees[s] for s in SUBMODULES)]
 	released = [v for v in matching if is_released(v)]
 	if released:
-		return max(released, key=lambda v: v.get("publishedAt") or "")
+		return max(released, key=published_at)
 
 	wanted = ", ".join(f"{s} {trees[s][:10]}" for s in SUBMODULES)
 	if matching:
-		tags = ", ".join(v.get("alphaTag", v["_folder"]) for v in matching)
+		tags = [v.get("alphaTag", v["_folder"]) for v in matching]
+		commands = " ou ".join(f"prs-bench approve --tag {t}" for t in tags)
 		raise BenchmarkCheckError(
-			f"O benchmark desta versão ({tags}) deu ❌ e não foi aprovado. Depois de o time avaliar, "
-			f"aprove com: prs-bench approve --tag <tag-da-alpha>"
+			f"O benchmark desta versão ({', '.join(tags)}) deu ❌ e não foi aprovado. Depois de o time avaliar, "
+			f"aprove com: {commands}"
 		)
 	partial = [
 		v.get("alphaTag", v["_folder"])
@@ -120,7 +139,11 @@ def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
 	parser.add_argument("benchmarks_dir", type=Path, help="Pasta benchmarks/ do checkout do branch metadata")
 	parser.add_argument("--prs-service-tree", required=True)
 	parser.add_argument("--prs-app-wpf-tree", required=True)
-	parser.add_argument("--notes", type=Path, help="changes.md do release: acrescenta a seção do benchmark")
+	parser.add_argument(
+		"--release-body",
+		type=Path,
+		help="Corpo do GitHub Release (cópia do changes.md): acrescenta a seção do benchmark",
+	)
 	parser.add_argument("--repository", default=DEFAULT_REPOSITORY)
 	return parser.parse_args(argv)
 
@@ -142,8 +165,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 		f"{ICONS.get(verdict.get('verdict', ''), '?')}{' (aprovado)' if verdict.get('approved') else ''} "
 		f"{folder_url(verdict, args.repository)}"
 	)
-	if args.notes:
-		with args.notes.open("a", encoding="utf-8") as fp:
+	if args.release_body:
+		with args.release_body.open("a", encoding="utf-8") as fp:
 			fp.write(notes_section(verdict, args.repository))
 	return 0
 

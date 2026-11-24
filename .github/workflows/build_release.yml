@@ -16,6 +16,9 @@ jobs:
 
     env:
       RELEASE_CHANGES: changes.md
+      # Corpo do GitHub Release. Na BETA vira uma cópia do changes.md com o link do benchmark; o
+      # changes.md continua só com o changelog (também vira as notas de atualização do app).
+      RELEASE_BODY: changes.md
       SOLUTION_SERVICE: prs_service\PrsService.sln
       SERVICE_BUILD_DIR: prs_service\Prs.App.Service\bin\Release\net8.0-windows\win-x64
       SERVER_EXE_FILE: prs_app_wpf\publish\service\Prs.App.Service.exe
@@ -371,7 +374,8 @@ jobs:
     # CI, e o prs-bench publish grava o resultado no branch metadata (benchmarks/<alpha>/verdict.json).
     # A BETA só sai se houver um benchmark com as mesmas árvores do prs_service e do prs_app_wpf (o
     # merge develop -> release muda o commit, não o conteúdo), sem ❌ ou com ❌ aprovado pelo time
-    # (prs-bench approve). O link vai para as notas do release.
+    # (prs-bench approve). O link vai só para o corpo do GitHub Release (release_body.md), não
+    # para o changes.md.
     - name: Checkout benchmarks (metadata branch)
       if: steps.check_release.outputs.should_release == 'true' && env.RELEASE_CHANNEL == 'beta'
       uses: actions/checkout@v4
@@ -386,12 +390,17 @@ jobs:
       shell: pwsh
       run: |
         $serviceTree = git -C prs_service rev-parse 'HEAD^{tree}'
+        if ($LASTEXITCODE -ne 0 -or -not $serviceTree) { throw "Árvore do submódulo prs_service indisponível" }
         $appTree = git -C prs_app_wpf rev-parse 'HEAD^{tree}'
+        if ($LASTEXITCODE -ne 0 -or -not $appTree) { throw "Árvore do submódulo prs_app_wpf indisponível" }
         Write-Host "prs_service tree: $serviceTree; prs_app_wpf tree: $appTree"
+        $body = "release_body.md"
+        Copy-Item "${{ github.workspace }}\${{ env.RELEASE_CHANGES }}" "${{ github.workspace }}\$body"
         python scripts/check_beta_benchmark.py benchmark_metadata/benchmarks `
           --prs-service-tree $serviceTree --prs-app-wpf-tree $appTree `
-          --notes "${{ github.workspace }}\${{ env.RELEASE_CHANGES }}"
+          --release-body "${{ github.workspace }}\$body"
         if ($LASTEXITCODE -ne 0) { exit 1 }
+        echo "RELEASE_BODY=$body" >> $env:GITHUB_ENV
 
     - name: Delete existing release if exists
       if: steps.check_release.outputs.should_release == 'true'
@@ -426,7 +435,7 @@ jobs:
       uses: softprops/action-gh-release@v1
       with:
         prerelease: ${{ env.RELEASE_PRE }}
-        body_path: ${{ github.workspace }}\${{ env.RELEASE_CHANGES }}
+        body_path: ${{ github.workspace }}\${{ env.RELEASE_BODY }}
         name: ${{ env.RELEASE_KIND }} v${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}
         tag_name: v${{ env.RELEASE_VERSION }}${{ env.RELEASE_SUFFIX }}
         files: |

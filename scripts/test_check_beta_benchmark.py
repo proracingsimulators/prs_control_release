@@ -31,7 +31,7 @@ def write_verdict(benchmarks, tag, verdict="warn", approved=False, service=SERVI
 def run(benchmarks, notes=None, service=SERVICE, app=APP):
 	argv = [str(benchmarks), "--prs-service-tree", service, "--prs-app-wpf-tree", app]
 	if notes:
-		argv += ["--notes", str(notes)]
+		argv += ["--release-body", str(notes)]
 	return main(argv)
 
 
@@ -46,7 +46,7 @@ def test_falha_sem_aprovacao_bloqueia(tmp_path, capsys):
 	assert run(tmp_path) == 1
 	out = capsys.readouterr().out
 	assert "::error::" in out
-	assert "prs-bench approve" in out
+	assert "prs-bench approve --tag v0.19.1.1-alpha" in out
 
 
 def test_falha_aprovada_passa(tmp_path):
@@ -72,6 +72,14 @@ def test_escolhe_o_liberado_mais_recente(tmp_path):
 	write_verdict(tmp_path, "v0.19.1.3-alpha", verdict="pass", published="2026-11-24T10:00:00-03:00")
 	verdict = find_benchmark(load_verdicts(tmp_path), {"prs_service": SERVICE, "prs_app_wpf": APP})
 	assert verdict["alphaTag"] == "v0.19.1.3-alpha"
+
+
+def test_mais_recente_pela_data_com_offset(tmp_path):
+	# 12:00-03:00 (15:00 UTC) é depois de 14:00+00:00, embora o texto seja "menor".
+	write_verdict(tmp_path, "v0.19.1.1-alpha", verdict="pass", published="2026-11-24T14:00:00+00:00")
+	write_verdict(tmp_path, "v0.19.1.2-alpha", verdict="pass", published="2026-11-24T12:00:00.0080344-03:00")
+	verdict = find_benchmark(load_verdicts(tmp_path), {"prs_service": SERVICE, "prs_app_wpf": APP})
+	assert verdict["alphaTag"] == "v0.19.1.2-alpha"
 
 
 def test_verdict_ilegivel_e_ignorado(tmp_path):
