@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "alphaTag": "v0.19.9825.29556-alpha",
+  "benchmark": "v0.19.9825.29556-alpha_20261125-135927.bench.json",
+  "report": "evaluate_v0.19.9825.29556-alpha_20261125-135927.md",
+  "passed": false,
+  "submodules": {
+    "prs_service": {
+      "commit": "1574a353c9f2d49eeac0404ee28dfa42cac03da8",
+      "tree": "43c7710747023ee778df82248c570157547fcd46"
+    },
+    "prs_app_wpf": {
+      "commit": "643c2a6cf0b7b6b94d4a6eef5f97244454d72381",
+      "tree": "9d13d710e3d6d1700d4c9dde138aa4cff83902c4"
+    }
+  },
+  "toolVersion": "0.8.437+1574a353c9",
+  "publishedBy": "wjsan",
+  "publishedAt": "2026-11-25T14:59:31.1389479-03:00"
+}
