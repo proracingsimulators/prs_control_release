@@ -2,8 +2,8 @@
 """Confere, no build da BETA, a medição de desempenho do código (prs_service#498).
 
 O benchmark (prs-bench do prs_service) roda nos devkits, fora do CI, e é pré-requisito da BETA.
-Cada alpha candidata é medida individualmente, e o `prs-bench publish` grava a medição no branch
-órfão "metadata" deste repositório, em benchmarks/<tag-da-alpha>/, com um manifest.json:
+Cada alpha candidata é medida individualmente, e o `prs-bench run --publish` grava a medição no
+branch órfão "metadata" deste repositório, em benchmarks/<tag-da-alpha>/, com um manifest.json:
 
 {
   "schemaVersion": 1,
@@ -23,7 +23,9 @@ mesma: o merge develop -> release cria outro commit com o mesmo conteúdo, entã
 serve. Cada medição do mesmo código é avaliada com o limits.json do prs_service da própria BETA
 (Prs.Tools.Benchmark/limits.json: o máximo de cada métrica do resumo; métrica ausente reprova).
 
-O build falha sem medição do mesmo código, ou se qualquer uma delas passar de um limite. Não há
+O build falha sem medição do mesmo código, ou se qualquer uma delas passar de um limite. Um
+manifest.json ilegível ou fora do formato também bloqueia: ignorá-lo poderia esconder uma medição
+reprovada. Não há
 liberação manual: um reprovado só libera alterando o limits.json (o que muda a árvore do
 prs_service) e medindo a alpha nova. A firmware fica de fora (o benchmark roda com as firmwares
 da beta nos devkits).
@@ -41,6 +43,7 @@ import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+SUPPORTED_SCHEMA = 1
 SUBMODULES = ("prs_service", "prs_app_wpf")
 DEFAULT_REPOSITORY = "proracingsimulators/prs_control_release"
 METADATA_BRANCH = "metadata"
@@ -58,14 +61,28 @@ def load_limits(path: Path) -> List[Dict[str, Any]]:
 			data = json.load(fp)
 	except (OSError, ValueError) as ex:
 		raise BenchmarkCheckError(f"Limites indisponíveis em {path}: {ex}")
+	if not isinstance(data, dict):
+		raise BenchmarkCheckError(f"{path} não é um objeto JSON.")
+	check_schema(data, path)
 	limits = data.get("limits") or []
-	if not limits or not all(isinstance(l.get("id"), str) and isinstance(l.get("max"), (int, float)) for l in limits):
+	if not isinstance(limits, list) or not limits or not all(
+		isinstance(l, dict) and isinstance(l.get("id"), str) and isinstance(l.get("max"), (int, float)) for l in limits
+	):
 		raise BenchmarkCheckError(f"{path} sem limites válidos (lista \"limits\" com \"id\" e \"max\").")
 	return limits
 
 
+def check_schema(data: Dict[str, Any], path: Path) -> None:
+	"""Um schemaVersion mais novo pode ter outra semântica: não avalia pela regra do 1."""
+	version = data.get("schemaVersion", SUPPORTED_SCHEMA)
+	if not isinstance(version, int) or version > SUPPORTED_SCHEMA:
+		raise BenchmarkCheckError(
+			f"{path}: schemaVersion {version!r} não suportado (até {SUPPORTED_SCHEMA}). Atualize scripts/check_beta_benchmark.py."
+		)
+
+
 def load_manifests(benchmarks_dir: Path) -> List[Dict[str, Any]]:
-	"""manifest.json de cada benchmarks/<tag>/; arquivo ilegível é ignorado com aviso."""
+	"""manifest.json de cada benchmarks/<tag>/. Ilegível ou fora do formato bloqueia o build."""
 	manifests = []
 	if not benchmarks_dir.is_dir():
 		return manifests
@@ -74,16 +91,25 @@ def load_manifests(benchmarks_dir: Path) -> List[Dict[str, Any]]:
 			with path.open("r", encoding="utf-8-sig") as fp:
 				data = json.load(fp)
 		except (OSError, ValueError) as ex:
-			print(f"::warning::{path} ilegível, ignorado: {ex}")
-			continue
+			raise BenchmarkCheckError(manifest_error(path, f"ilegível ({ex})"))
+		submodules = data.get("submodules") if isinstance(data, dict) else None
+		if not isinstance(submodules, dict) or not all(isinstance(submodules.get(s), dict) for s in SUBMODULES):
+			raise BenchmarkCheckError(manifest_error(path, "fora do formato (esperado um objeto com submodules.prs_service e submodules.prs_app_wpf)"))
+		check_schema(data, path)
 		data["_folder"] = path.parent
 		manifests.append(data)
 	return manifests
 
 
+def manifest_error(path: Path, problem: str) -> str:
+	return (
+		f"{path} {problem}. Ignorá-lo poderia esconder uma medição reprovada: corrija o arquivo no branch "
+		f"{METADATA_BRANCH} (a medição publicada não pode ser descartada) e gere a BETA de novo."
+	)
+
+
 def tree_of(manifest: Dict[str, Any], submodule: str) -> Optional[str]:
-	state = (manifest.get("submodules") or {}).get(submodule) or {}
-	return state.get("tree")
+	return manifest["submodules"][submodule].get("tree")
 
 
 def tag_of(manifest: Dict[str, Any]) -> str:
@@ -100,7 +126,7 @@ def evaluate(manifest: Dict[str, Any], limits: List[Dict[str, Any]]) -> List[Tup
 		for metric in (data.get("summary") or {}).get("metrics") or []:
 			if isinstance(metric.get("value"), (int, float)):
 				values[metric["id"]] = float(metric["value"])
-	except (OSError, ValueError) as ex:
+	except (OSError, ValueError, AttributeError, TypeError, KeyError) as ex:
 		print(f"::warning::{bench} ilegível: {ex}")
 	rows = []
 	for limit in limits:

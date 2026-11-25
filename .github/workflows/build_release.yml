@@ -371,7 +371,7 @@ jobs:
         Write-Host "Final decision - Should create release: $shouldRelease"
 
     # Benchmark (prs-bench do prs_service, prs_service#498): cada alpha candidata é medida nos
-    # devkits, fora do CI, e o prs-bench publish grava a medição no branch metadata
+    # devkits, fora do CI, e o prs-bench run --publish grava a medição no branch metadata
     # (benchmarks/<alpha>/manifest.json). A BETA só sai se houver medição com as mesmas árvores do
     # prs_service e do prs_app_wpf (o merge develop -> release muda o commit, não o conteúdo) e se
     # todas elas estiverem dentro do Prs.Tools.Benchmark/limits.json do prs_service desta BETA. Sem

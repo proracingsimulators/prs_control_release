@@ -125,11 +125,36 @@ def test_formato_antigo_sem_manifest_e_ignorado(tmp_path):
 	assert load_manifests(tmp_path / "b") == []
 
 
-def test_manifest_ilegivel_e_ignorado(tmp_path):
+@pytest.mark.parametrize(
+	"content",
+	["{", "[]", '{"submodules": []}', '{"submodules": {"prs_service": {"tree": "x"}}}', '{"submodules": {"prs_service": "x", "prs_app_wpf": {}}}'],
+)
+def test_manifest_ilegivel_ou_fora_do_formato_bloqueia(tmp_path, capsys, content):
+	# Ignorá-lo poderia esconder uma medição reprovada do mesmo código.
 	(tmp_path / "b" / "v0.19.1.0-alpha").mkdir(parents=True)
-	(tmp_path / "b" / "v0.19.1.0-alpha" / "manifest.json").write_text("{", encoding="utf-8")
+	(tmp_path / "b" / "v0.19.1.0-alpha" / "manifest.json").write_text(content, encoding="utf-8")
 	publish(tmp_path / "b", "v0.19.1.1-alpha")
-	assert run(tmp_path, tmp_path / "b") == 0
+	assert run(tmp_path, tmp_path / "b") == 1
+	assert "v0.19.1.0-alpha" in capsys.readouterr().out
+
+
+def test_schema_mais_novo_bloqueia(tmp_path, capsys):
+	publish(tmp_path / "b", "v0.19.1.1-alpha")
+	manifest = tmp_path / "b" / "v0.19.1.1-alpha" / "manifest.json"
+	manifest.write_text(manifest.read_text(encoding="utf-8").replace('"schemaVersion": 1', '"schemaVersion": 2'), encoding="utf-8")
+	assert run(tmp_path, tmp_path / "b") == 1
+	assert "schemaVersion 2" in capsys.readouterr().out
+
+	limits = tmp_path / "limits2.json"
+	limits.write_text(json.dumps({"schemaVersion": 2, "limits": LIMITS}), encoding="utf-8")
+	with pytest.raises(BenchmarkCheckError, match="schemaVersion 2"):
+		load_limits(limits)
+
+
+def test_medicao_com_metricas_fora_do_formato_reprova(tmp_path):
+	publish(tmp_path / "b", "v0.19.1.1-alpha", metrics=["x"])
+	with pytest.raises(BenchmarkCheckError, match="ausente"):
+		check(load_manifests(tmp_path / "b"), {"prs_service": SERVICE, "prs_app_wpf": APP}, LIMITS)
 
 
 def test_medicao_ilegivel_reprova(tmp_path):
