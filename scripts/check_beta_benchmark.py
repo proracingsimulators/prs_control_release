@@ -39,11 +39,13 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 SUPPORTED_SCHEMA = 1
+GIT_SHA = re.compile(r"^[0-9a-f]{40}$")
 SUBMODULES = ("prs_service", "prs_app_wpf")
 DEFAULT_REPOSITORY = "proracingsimulators/prs_control_release"
 METADATA_BRANCH = "metadata"
@@ -66,10 +68,14 @@ def load_limits(path: Path) -> List[Dict[str, Any]]:
 	check_schema(data, path)
 	limits = data.get("limits") or []
 	if not isinstance(limits, list) or not limits or not all(
-		isinstance(l, dict) and isinstance(l.get("id"), str) and isinstance(l.get("max"), (int, float)) for l in limits
+		isinstance(l, dict) and isinstance(l.get("id"), str) and is_number(l.get("max")) for l in limits
 	):
 		raise BenchmarkCheckError(f"{path} sem limites válidos (lista \"limits\" com \"id\" e \"max\").")
 	return limits
+
+
+def is_number(value: Any) -> bool:
+	return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def check_schema(data: Dict[str, Any], path: Path) -> None:
@@ -93,8 +99,14 @@ def load_manifests(benchmarks_dir: Path) -> List[Dict[str, Any]]:
 		except (OSError, ValueError) as ex:
 			raise BenchmarkCheckError(manifest_error(path, f"ilegível ({ex})"))
 		submodules = data.get("submodules") if isinstance(data, dict) else None
-		if not isinstance(submodules, dict) or not all(isinstance(submodules.get(s), dict) for s in SUBMODULES):
-			raise BenchmarkCheckError(manifest_error(path, "fora do formato (esperado um objeto com submodules.prs_service e submodules.prs_app_wpf)"))
+		if not isinstance(submodules, dict) or not all(
+			isinstance(submodules.get(s), dict) and isinstance(submodules[s].get("tree"), str) and GIT_SHA.match(submodules[s]["tree"])
+			for s in SUBMODULES
+		):
+			# Sem a árvore, o manifest não seria comparado com a BETA e uma medição reprovada sumiria.
+			raise BenchmarkCheckError(manifest_error(
+				path, "fora do formato (esperado um objeto com submodules.prs_service.tree e submodules.prs_app_wpf.tree, sha de 40 dígitos)"
+			))
 		check_schema(data, path)
 		data["_folder"] = path.parent
 		manifests.append(data)
@@ -109,7 +121,7 @@ def manifest_error(path: Path, problem: str) -> str:
 
 
 def tree_of(manifest: Dict[str, Any], submodule: str) -> Optional[str]:
-	return manifest["submodules"][submodule].get("tree")
+	return manifest["submodules"][submodule]["tree"]
 
 
 def tag_of(manifest: Dict[str, Any]) -> str:
@@ -123,11 +135,22 @@ def evaluate(manifest: Dict[str, Any], limits: List[Dict[str, Any]]) -> List[Tup
 	try:
 		with bench.open("r", encoding="utf-8-sig") as fp:
 			data = json.load(fp)
-		for metric in (data.get("summary") or {}).get("metrics") or []:
-			if isinstance(metric.get("value"), (int, float)):
-				values[metric["id"]] = float(metric["value"])
-	except (OSError, ValueError, AttributeError, TypeError, KeyError) as ex:
+	except (OSError, ValueError) as ex:
 		print(f"::warning::{bench} ilegível: {ex}")
+		data = None
+	if isinstance(data, dict):
+		check_schema(data, bench)
+		try:
+			# Tudo ou nada: uma entrada fora do formato descarta a medição inteira (reprova).
+			parsed: Dict[str, float] = {}
+			for metric in (data.get("summary") or {}).get("metrics") or []:
+				if is_number(metric.get("value")):
+					parsed[metric["id"]] = float(metric["value"])
+			values = parsed
+		except (AttributeError, TypeError, KeyError) as ex:
+			print(f"::warning::{bench} fora do formato: {ex}")
+	elif data is not None:
+		print(f"::warning::{bench} fora do formato: não é um objeto JSON")
 	rows = []
 	for limit in limits:
 		value = values.get(limit["id"])

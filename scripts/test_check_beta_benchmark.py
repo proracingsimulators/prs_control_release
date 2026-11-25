@@ -127,7 +127,10 @@ def test_formato_antigo_sem_manifest_e_ignorado(tmp_path):
 
 @pytest.mark.parametrize(
 	"content",
-	["{", "[]", '{"submodules": []}', '{"submodules": {"prs_service": {"tree": "x"}}}', '{"submodules": {"prs_service": "x", "prs_app_wpf": {}}}'],
+	["{", "[]", '{"submodules": []}', '{"submodules": {"prs_service": {"tree": "x"}}}', '{"submodules": {"prs_service": "x", "prs_app_wpf": {}}}',
+	 '{"submodules": {"prs_service": {"tree": "%s"}, "prs_app_wpf": {}}}' % ("a" * 40),
+	 '{"submodules": {"prs_service": {"tree": "%s"}, "prs_app_wpf": {"tree": "abc"}}}' % ("a" * 40),
+	 '{"submodules": {"prs_service": {"tree": "%s"}, "prs_app_wpf": {"tree": 1}}}' % ("a" * 40)],
 )
 def test_manifest_ilegivel_ou_fora_do_formato_bloqueia(tmp_path, capsys, content):
 	# Ignorá-lo poderia esconder uma medição reprovada do mesmo código.
@@ -151,9 +154,35 @@ def test_schema_mais_novo_bloqueia(tmp_path, capsys):
 		load_limits(limits)
 
 
-def test_medicao_com_metricas_fora_do_formato_reprova(tmp_path):
-	publish(tmp_path / "b", "v0.19.1.1-alpha", metrics=["x"])
+@pytest.mark.parametrize("bad", ["x", {"id": "outra"}, {"value": 1.0}])
+def test_medicao_com_metricas_fora_do_formato_reprova(tmp_path, bad):
+	# Métricas válidas antes da entrada ruim não podem sobrar: a medição inteira reprova.
+	metrics = [
+		{"id": "Prs.Service/cpu_percent/mean", "value": 0.5},
+		{"id": "Prs.Service/private_mb/mean", "value": 250.0},
+		bad,
+	]
+	publish(tmp_path / "b", "v0.19.1.1-alpha", metrics=metrics)
+	if isinstance(bad, dict) and "value" not in bad:
+		# Entrada sem valor é só ignorada; as duas métricas válidas passam.
+		assert check(load_manifests(tmp_path / "b"), {"prs_service": SERVICE, "prs_app_wpf": APP}, LIMITS)
+		return
 	with pytest.raises(BenchmarkCheckError, match="ausente"):
+		check(load_manifests(tmp_path / "b"), {"prs_service": SERVICE, "prs_app_wpf": APP}, LIMITS)
+
+
+def test_valor_booleano_nao_conta_como_metrica(tmp_path):
+	metrics = [{"id": "Prs.Service/cpu_percent/mean", "value": True}, {"id": "Prs.Service/private_mb/mean", "value": 250.0}]
+	publish(tmp_path / "b", "v0.19.1.1-alpha", metrics=metrics)
+	with pytest.raises(BenchmarkCheckError, match="ausente"):
+		check(load_manifests(tmp_path / "b"), {"prs_service": SERVICE, "prs_app_wpf": APP}, LIMITS)
+
+
+def test_schema_da_medicao_mais_novo_bloqueia(tmp_path):
+	publish(tmp_path / "b", "v0.19.1.1-alpha")
+	bench = next((tmp_path / "b" / "v0.19.1.1-alpha").glob("*.bench.json"))
+	bench.write_text(bench.read_text(encoding="utf-8").replace('"schemaVersion": 1', '"schemaVersion": 2'), encoding="utf-8")
+	with pytest.raises(BenchmarkCheckError, match="schemaVersion 2"):
 		check(load_manifests(tmp_path / "b"), {"prs_service": SERVICE, "prs_app_wpf": APP}, LIMITS)
 
 
