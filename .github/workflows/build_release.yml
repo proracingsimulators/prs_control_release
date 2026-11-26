@@ -370,12 +370,13 @@ jobs:
         echo "should_release=$shouldRelease" >> $env:GITHUB_OUTPUT
         Write-Host "Final decision - Should create release: $shouldRelease"
 
-    # Benchmark stable × alpha (prs-bench do prs_service, prs_service#498): roda nos devkits, fora do
-    # CI, e o prs-bench publish grava o resultado no branch metadata (benchmarks/<alpha>/verdict.json).
-    # A BETA só sai se houver um benchmark com as mesmas árvores do prs_service e do prs_app_wpf (o
-    # merge develop -> release muda o commit, não o conteúdo), sem ❌ ou com ❌ aprovado pelo time
-    # (prs-bench approve). O link vai só para o corpo do GitHub Release (release_body.md), não
-    # para o changes.md.
+    # Benchmark (prs-bench do prs_service, prs_service#498): cada alpha candidata é medida nos
+    # devkits, fora do CI, e o prs-bench run --publish grava a medição no branch metadata
+    # (benchmarks/<alpha>/manifest.json). A BETA só sai se houver medição com as mesmas árvores do
+    # prs_service e do prs_app_wpf (o merge develop -> release muda o commit, não o conteúdo) e se
+    # todas elas estiverem dentro do Prs.Tools.Benchmark/limits.json do prs_service desta BETA. Sem
+    # liberação manual: um reprovado só libera alterando o limits.json e medindo a alpha nova. A
+    # tabela vai só para o corpo do GitHub Release (release_body.md), não para o changes.md.
     - name: Checkout benchmarks (metadata branch)
       if: steps.check_release.outputs.should_release == 'true' && env.RELEASE_CHANNEL == 'beta'
       uses: actions/checkout@v4
@@ -398,6 +399,7 @@ jobs:
         Copy-Item "${{ github.workspace }}\${{ env.RELEASE_CHANGES }}" "${{ github.workspace }}\$body"
         python scripts/check_beta_benchmark.py benchmark_metadata/benchmarks `
           --prs-service-tree $serviceTree --prs-app-wpf-tree $appTree `
+          --limits prs_service/Prs.Tools.Benchmark/limits.json `
           --release-body "${{ github.workspace }}\$body"
         if ($LASTEXITCODE -ne 0) { exit 1 }
         echo "RELEASE_BODY=$body" >> $env:GITHUB_ENV

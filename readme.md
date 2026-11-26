@@ -101,16 +101,18 @@ python scripts/generate_app_metadata.py <checkout-do-branch-metadata> alpha 0.19
 
 ### Benchmark da BETA
 
-O benchmark stable × alpha (`prs-bench` do `prs_service`, issue prs_service#498) roda nos devkits, fora
-do CI, e é pré-requisito da BETA. O `prs-bench publish` (ou `ab --publish`) grava o resultado no branch
-`metadata`, em `benchmarks/<tag-da-alpha>/`: os dois `*.bench.json`, o `report.md` e o `verdict.json`
-(veredito, aprovação e o commit e a árvore do `prs_service` e do `prs_app_wpf` medidos).
+A medição de desempenho (`prs-bench` do `prs_service`, issue prs_service#498) roda nos devkits, fora do
+CI, e é pré-requisito da BETA. Cada alpha candidata é medida individualmente: o `prs-bench run --tag
+<alpha> --publish` grava no branch `metadata`, em `benchmarks/<tag-da-alpha>/`, a medição (`*.bench.json`),
+a avaliação (`evaluate_*.md`) e o `manifest.json` (o commit e a árvore do `prs_service` e do `prs_app_wpf`
+medidos).
 
 No build da BETA, antes de criar o release, `scripts/check_beta_benchmark.py` (testes em
-`scripts/test_check_beta_benchmark.py`) procura um benchmark com as mesmas árvores dos submódulos. A
-comparação é pela árvore porque o merge `develop` → `release` cria outro commit com o mesmo conteúdo. O
-build **falha** sem benchmark do mesmo código, ou com ❌ sem `approved` (`prs-bench approve --tag <alpha>`
-depois de o time avaliar). A firmware fica fora da checagem. O link do benchmark vai só para o corpo do
+`scripts/test_check_beta_benchmark.py`) procura as medições com as mesmas árvores dos submódulos e as
+avalia com o `Prs.Tools.Benchmark/limits.json` do `prs_service` da própria BETA. A comparação é pela árvore
+porque o merge `develop` → `release` cria outro commit com o mesmo conteúdo. O build **falha** sem medição
+do mesmo código ou se qualquer uma passar de um limite. Não há liberação manual: um reprovado só libera
+alterando o `limits.json` (PR no `prs_service`) e medindo a alpha nova. A firmware fica fora da checagem. A tabela da medição vai só para o corpo do
 GitHub Release (`release_body.md`, cópia do `changes.md`); o `changes.md`, que também vira as notas de
 atualização do app, continua só com o changelog.
 
