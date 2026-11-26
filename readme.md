@@ -5,7 +5,7 @@ Este repositório centraliza o build e release dos projetos PRS (Pro Racing Simu
 ## Estrutura
 
 - **prs_service** - Submódulo contendo o serviço backend
-- **prs_app** - Submódulo contendo a aplicação desktop
+- **prs_app_wpf** - Submódulo contendo a aplicação desktop (WPF) e o instalador (`installer/Prs.Setup`)
 
 ## Workflow de Release
 
@@ -22,21 +22,105 @@ O workflow `build_release.yml` compila automaticamente ambos os projetos e cria 
 ### O que o workflow faz
 
 1. ✅ Faz checkout do repositório com todos os submódulos usando PAT_TOKEN
-2. ✅ Restaura os pacotes NuGet de ambos os projetos
-3. ✅ Compila prs_service (solução completa)
-4. ✅ Compila prs_app (solução completa)
-5. ✅ Publica o serviço como executável standalone
-6. ✅ Compila o instalador
-7. ✅ Cria arquivo ZIP com os binários
-8. ✅ Gera/atualiza arquivo changes.md com informações da versão
-9. ✅ Deleta release anterior com a mesma tag (para permitir hotfixes)
-10. ✅ Cria novo release com o ZIP e o instalador
+2. ✅ Compila o prs_service (solução completa)
+3. ✅ Calcula a versão (`PrsVersionPrefix` do prs_app_wpf + data/hora do build)
+4. ✅ Publica o prs_app_wpf e copia o serviço para `service\`
+5. ✅ Sincroniza os firmwares do prs_fw_release para `service\firmwares\<produto>\<target>.json` do pacote
+6. ✅ Gera/atualiza arquivo changes.md com informações da versão
+7. ✅ Cria o `prs_app_wpf.zip` e o instalador com esse pacote embutido (`prs_setup.zip`)
+8. ✅ Deleta release anterior com a mesma tag (para permitir hotfixes)
+9. ✅ Cria novo release com os dois ZIPs
+10. ✅ Grava o `metadata.json` de atualização do app no branch `metadata` (ver [Metadata de atualização do app](#metadata-de-atualização-do-app))
+
+Em outras branches (ex.: `workflow_dispatch` para validação) o release não é criado: os dois ZIPs ficam
+disponíveis como artifact do run por 7 dias.
 
 ### Estrutura do Release
 
 Cada release contém:
-- **prs_app.zip** - Binários compilados da aplicação e serviço
-- **Prs.App.Setup.exe** - Instalador standalone
+- **prs_app_wpf.zip** - Aplicação (`PRS.exe`) e serviço (`service\Prs.App.Service.exe`) prontos para executar
+- **prs_setup.zip** - Instalador `PRS.Setup.exe` com o pacote acima embutido. Instala as dependências
+  (VC++ x86/x64, ASP.NET Core 8, .NET 8 Desktop e .NET 9 Desktop), cria os atalhos e registra o
+  desinstalador em "Apps instalados" do Windows
+
+### Metadata de atualização do app
+
+Depois de criar o release, o workflow grava o `metadata.json` que o PRS Control e o PRS.Setup leem para
+saber se há versão nova. O arquivo fica no branch órfão `metadata` deste repositório (criado pelo próprio
+workflow no primeiro release) e é lido sem API do GitHub, pela URL raw:
+
+```
+https://raw.githubusercontent.com/proracingsimulators/prs_control_release/refs/heads/metadata/v1/prs-control/metadata.json
+```
+
+Formato (schema 1, contrato com o prs_app_wpf; não mude sem subir o `schema`):
+
+```json
+{
+  "schema": 1,
+  "product": "prs-control",
+  "updatedAt": "2026-11-13T10:00:00+00:00",
+  "channels": {
+    "alpha": {
+      "version": "0.19.9817.30000",
+      "tag": "v0.19.9817.30000-alpha",
+      "releasedAt": "2026-11-13T10:00:00+00:00",
+      "setup": {
+        "url": "https://github.com/proracingsimulators/prs_control_release/releases/download/v0.19.9817.30000-alpha/prs_setup.zip",
+        "sha256": "<sha256 do prs_setup.zip em hexadecimal>",
+        "size": 123456789
+      },
+      "notes": "<changes.md gerado, igual ao corpo do release>"
+    },
+    "beta": { "...": "mesma estrutura" },
+    "stable": { "...": "mesma estrutura" }
+  },
+  "versions": [
+    { "...": "mesma entrada de channels.<canal>", "channel": "alpha" }
+  ]
+}
+```
+
+- `channels.<canal>` (`alpha`, `beta` ou `stable`) aponta para o último release de cada canal. Um canal
+  só aparece depois do primeiro release dele.
+  O ponteiro só avança quando a versão nova é maior ou igual à atual (comparada como números), para que
+  dois builds simultâneos do mesmo canal não o façam voltar para a versão menor.
+- `versions` é o histórico em ordem cronológica (o mais recente por último), limitado às últimas 100
+  entradas. Um re-release com a mesma tag substitui a entrada antiga, sem duplicar.
+- O arquivo é gerado por `scripts/generate_app_metadata.py` (testes em `scripts/test_generate_app_metadata.py`,
+  rode com `python -m pytest scripts`). Cada build faz um commit `chore(metadata): v<versão>-<canal>`.
+- O branch `metadata` fica fora dos gatilhos do `build_release.yml` e o push usa o `GITHUB_TOKEN`, então não
+  dispara outro build. Builds simultâneos (ex.: develop e release) refazem o arquivo sobre a ponta remota
+  do branch e tentam o push de novo.
+
+Para gerar localmente:
+
+```bash
+python scripts/generate_app_metadata.py <checkout-do-branch-metadata> alpha 0.19.9817.30000 v0.19.9817.30000-alpha prs_setup.zip changes.md
+```
+
+### Benchmark da BETA
+
+A medição de desempenho (`prs-bench` do `prs_service`, issue prs_service#498) roda nos devkits, fora do
+CI, e é pré-requisito da BETA. Cada alpha candidata é medida individualmente: o `prs-bench run --tag
+<alpha> --publish` grava no branch `metadata`, em `benchmarks/<tag-da-alpha>/`, a medição (`*.bench.json`),
+a avaliação (`evaluate_*.md`) e o `manifest.json` (o commit e a árvore do `prs_service` e do `prs_app_wpf`
+medidos).
+
+No build da BETA, antes de criar o release, `scripts/check_beta_benchmark.py` (testes em
+`scripts/test_check_beta_benchmark.py`) procura as medições com as mesmas árvores dos submódulos e as
+avalia com o `Prs.Tools.Benchmark/limits.json` do `prs_service` da própria BETA. A comparação é pela árvore
+porque o merge `develop` → `release` cria outro commit com o mesmo conteúdo. O build **falha** sem medição
+do mesmo código ou se qualquer uma passar de um limite. Não há liberação manual: um reprovado só libera
+alterando o `limits.json` (PR no `prs_service`) e medindo a alpha nova. A firmware fica fora da checagem. A tabela da medição vai só para o corpo do
+GitHub Release (`release_body.md`, cópia do `changes.md`); o `changes.md`, que também vira as notas de
+atualização do app, continua só com o changelog.
+
+### Versão
+
+A versão é `PrsVersionPrefix.<dias desde 2000-01-01>.<segundos desde 0h UTC / 2>` — o mesmo esquema do
+antigo `AssemblyVersion("0.18.*")`. O major.minor fica em `prs_app_wpf/Directory.Build.props`
+(`PrsVersionPrefix`); suba-o lá para iniciar uma nova linha de versões.
 
 ### Como usar
 
@@ -75,7 +159,7 @@ Para fazer hotfix em qualquer versão, basta fazer push na branch correspondente
 
 1. **PAT_TOKEN**: Token de acesso pessoal com permissões de leitura para os submódulos
    - Criar em: https://github.com/settings/tokens?type=beta
-   - Permissões necessárias: `Contents: Read` nos repositórios prs_service e prs_app
+   - Permissões necessárias: `Contents: Read` nos repositórios prs_service e prs_app_wpf
    - Adicionar como secret no repositório: Settings → Secrets → Actions → New repository secret
 
 ### Atualizar Submódulos
@@ -88,8 +172,8 @@ git submodule update --remote
 
 # Ou atualizar individualmente
 cd prs_service
-git pull origin main
-cd ../prs_app
+git pull origin develop
+cd ../prs_app_wpf
 git pull origin develop
 
 # Commitar as mudanças
@@ -124,7 +208,8 @@ Certifique-se de que está fazendo push em uma das branches configuradas (develo
 
 ### Versão incorreta no release
 
-A versão é extraída automaticamente do arquivo `ProRacingSoftware.exe`. Verifique se o AssemblyInfo ou .csproj tem a versão correta.
+O major.minor vem de `PrsVersionPrefix` em `prs_app_wpf/Directory.Build.props`; o restante é calculado no
+step "Set Release Version" a partir da data/hora do build.
 
 ## Novo Fluxo de Release
 
@@ -142,7 +227,7 @@ git checkout -b feature/minha-nova-feature
 
 #### 2. Desenvolver e commitar
 ```bash
-# Faça suas alterações nos submódulos prs_app e/ou prs_service
+# Faça suas alterações nos submódulos prs_app_wpf e/ou prs_service
 git add .
 git commit -m "feat: implementa minha nova feature"
 git push origin feature/minha-nova-feature
@@ -150,7 +235,7 @@ git push origin feature/minha-nova-feature
 
 #### 3. Merge para develop (Release Alpha)
 ```bash
-# Nos repositórios prs_app e/ou prs_service
+# Nos repositórios prs_app_wpf e/ou prs_service
 git checkout develop
 git merge feature/minha-nova-feature
 git push origin develop
@@ -227,7 +312,7 @@ git push origin --delete hotfix/corrige-bug-critico
 
 #### Feature que precisa de mudanças em múltiplos submódulos
 
-Quando uma feature requer alterações tanto no `prs_app` quanto no `prs_service`:
+Quando uma feature requer alterações tanto no `prs_app_wpf` quanto no `prs_service`:
 
 ```bash
 # 1. Criar branch de feature em ambos os repositórios
@@ -238,7 +323,7 @@ git checkout -b feature/nova-api
 git commit -m "feat: adiciona nova API [skip-release]"
 git push origin feature/nova-api
 
-# No prs_app:
+# No prs_app_wpf:
 git checkout develop
 git checkout -b feature/usa-nova-api
 # ... fazer alterações ...
@@ -253,7 +338,7 @@ git push origin develop
 # ✅ Submódulo atualiza automaticamente no prs_control_release mas não gera o release
 
 # 3. Merge do segundo submódulo para develop
-# No prs_app:
+# No prs_app_wpf:
 git checkout develop
 git merge feature/usa-nova-api
 git push origin develop
@@ -268,7 +353,7 @@ Se um release foi gerado com problemas:
 
 ```bash
 # 1. Reverter o commit no repositório do submódulo
-cd prs_app  # ou prs_service
+cd prs_app_wpf  # ou prs_service
 git checkout develop
 git revert HEAD
 git push origin develop
@@ -305,7 +390,7 @@ git push origin develop
 
 ```
 ┌─────────────┐
-│   prs_app   │  Push para develop/release/main
+│ prs_app_wpf │  Push para develop/release/main
 │             │  ──────────────────────────────────┐
 └─────────────┘                                    │
                                                    ▼
@@ -370,7 +455,7 @@ git push origin feature/minha-feature
 A tag também é propagada automaticamente dos submódulos:
 
 ```bash
-# No prs_app ou prs_service
+# No prs_app_wpf ou prs_service
 git commit -m "wip: trabalho em progresso [skip-release]"
 git push origin develop
 
@@ -398,7 +483,7 @@ git push origin develop
 # ✅ Atualiza mas não gera release
 
 # Segundo submódulo (sem tag)
-cd prs_app  
+cd prs_app_wpf  
 git commit -m "feat: integra com nova API"
 git push origin develop
 # ✅ Atualiza E gera release com ambas as mudanças
